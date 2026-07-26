@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OUCA ROI Dashboard</title>
+  <title>OUCA ROI Dashboard - Live Data</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -12,169 +12,45 @@
       padding: 20px;
       min-height: 100vh;
     }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      overflow: hidden;
-    }
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 30px;
-      text-align: center;
-    }
+    .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
     .header h1 { font-size: 28px; margin-bottom: 5px; }
     .header p { font-size: 14px; opacity: 0.9; }
-    .controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr;
-      gap: 15px;
-      padding: 20px;
-      background: #f8f9fa;
-      border-bottom: 1px solid #e9ecef;
-    }
-    @media (max-width: 1024px) {
-      .controls { grid-template-columns: 1fr 1fr; }
-    }
-    @media (max-width: 640px) {
-      .controls { grid-template-columns: 1fr; }
-    }
-    .control-group {
-      display: flex;
-      flex-direction: column;
-    }
-    .control-group label {
-      font-size: 12px;
-      font-weight: 600;
-      color: #495057;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .control-group input, .control-group select {
-      padding: 10px;
-      border: 1px solid #dee2e6;
-      border-radius: 6px;
-      font-size: 14px;
-      transition: all 0.3s ease;
-    }
-    .control-group input:focus, .control-group select:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    .buttons {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 10px;
-      padding: 20px;
-      background: #f8f9fa;
-      border-bottom: 1px solid #e9ecef;
-    }
-    @media (max-width: 640px) {
-      .buttons { grid-template-columns: 1fr; }
-    }
-    button {
-      padding: 12px 20px;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-    .btn-update {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
+    .last-update { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 10px; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
+    @media (max-width: 1024px) { .controls { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .controls { grid-template-columns: 1fr; } }
+    .control-group { display: flex; flex-direction: column; }
+    .control-group label { font-size: 12px; font-weight: 600; color: #495057; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .control-group input, .control-group select { padding: 10px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 14px; transition: all 0.3s ease; }
+    .control-group input:focus, .control-group select:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+    .buttons { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
+    @media (max-width: 640px) { .buttons { grid-template-columns: 1fr; } }
+    button { padding: 12px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+    .btn-update { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
     .btn-update:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); }
-    .btn-reset {
-      background: #e9ecef;
-      color: #495057;
-    }
+    .btn-reset { background: #e9ecef; color: #495057; }
     .btn-reset:hover { background: #dee2e6; }
-    .summary {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 15px;
-      padding: 20px;
-      background: white;
-      border-bottom: 1px solid #e9ecef;
-    }
-    @media (max-width: 1024px) {
-      .summary { grid-template-columns: repeat(2, 1fr); }
-    }
-    @media (max-width: 640px) {
-      .summary { grid-template-columns: 1fr; }
-    }
-    .kpi-card {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 20px;
-      border-radius: 8px;
-      text-align: center;
-    }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; padding: 20px; background: white; border-bottom: 1px solid #e9ecef; }
+    @media (max-width: 1024px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .summary { grid-template-columns: 1fr; } }
+    .kpi-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; }
     .kpi-label { font-size: 12px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; }
     .kpi-value { font-size: 24px; font-weight: 700; }
-    .status {
-      padding: 15px 20px;
-      background: #e8f5e9;
-      color: #2e7d32;
-      border-left: 4px solid #2e7d32;
-      display: none;
-    }
+    .status { padding: 15px 20px; background: #e8f5e9; color: #2e7d32; border-left: 4px solid #2e7d32; display: none; }
     .status.show { display: block; }
     .status.success { background: #e8f5e9; color: #2e7d32; border-left-color: #2e7d32; }
+    .status.loading { background: #e3f2fd; color: #1565c0; border-left-color: #1565c0; }
     .status.error { background: #ffebee; color: #c62828; border-left-color: #c62828; }
-    .data-table {
-      padding: 20px;
-      overflow-x: auto;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    th {
-      background: #f8f9fa;
-      padding: 12px;
-      text-align: left;
-      font-weight: 600;
-      color: #495057;
-      border-bottom: 2px solid #dee2e6;
-    }
-    td {
-      padding: 12px;
-      border-bottom: 1px solid #e9ecef;
-    }
+    .data-table { padding: 20px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8f9fa; padding: 12px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; }
+    td { padding: 12px; border-bottom: 1px solid #e9ecef; }
     tr:hover { background: #f8f9fa; }
-    .sheet-tabs {
-      display: flex;
-      gap: 10px;
-      padding: 15px 20px;
-      background: #f8f9fa;
-      border-bottom: 1px solid #e9ecef;
-      overflow-x: auto;
-    }
-    .sheet-tab {
-      padding: 8px 16px;
-      background: white;
-      border: 1px solid #dee2e6;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.3s ease;
-    }
+    .sheet-tabs { display: flex; gap: 10px; padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; overflow-x: auto; }
+    .sheet-tab { padding: 8px 16px; background: white; border: 1px solid #dee2e6; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.3s ease; }
     .sheet-tab:hover { background: #e9ecef; }
-    .sheet-tab.active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-color: #667eea;
-    }
+    .sheet-tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: #667eea; }
     .sheet-content { display: none; }
     .sheet-content.active { display: block; }
   </style>
@@ -183,19 +59,19 @@
   <div class="container">
     <div class="header">
       <h1>📊 OUCA ROI DASHBOARD</h1>
-      <p>Interactive Performance Analytics (JPY)</p>
+      <p>Live Performance Analytics with Auto-Update (JPY)</p>
+      <div class="last-update">
+        Last Updated: <span id="lastUpdate">Loading...</span>
+        <br>
+        🔄 Auto-refresh every 5 minutes from Google Sheets
+      </div>
     </div>
 
-    <!-- Sheet Tabs -->
     <div class="sheet-tabs">
       <button class="sheet-tab active" onclick="switchSheet('dashboard')">📊 Dashboard</button>
-      <button class="sheet-tab" onclick="switchSheet('product')">🛍️ Product Analysis</button>
-      <button class="sheet-tab" onclick="switchSheet('daily')">📅 Daily</button>
-      <button class="sheet-tab" onclick="switchSheet('weekly')">📊 Weekly</button>
-      <button class="sheet-tab" onclick="switchSheet('monthly')">📈 Monthly</button>
+      <button class="sheet-tab" onclick="switchSheet('summary')">📈 Summary</button>
     </div>
 
-    <!-- Dashboard Sheet -->
     <div id="dashboard" class="sheet-content active">
       <div class="controls">
         <div class="control-group">
@@ -204,7 +80,7 @@
         </div>
         <div class="control-group">
           <label>📅 End Date</label>
-          <input type="date" id="endDate" value="2024-11-23">
+          <input type="date" id="endDate" value="2024-11-30">
         </div>
         <div class="control-group">
           <label>📊 Platform</label>
@@ -214,18 +90,10 @@
             <option value="Meta">Meta Ads</option>
           </select>
         </div>
-        <div class="control-group">
-          <label>🎨 Theme</label>
-          <select id="theme">
-            <option value="purple">Purple</option>
-            <option value="blue">Blue</option>
-            <option value="green">Green</option>
-          </select>
-        </div>
       </div>
 
       <div class="buttons">
-        <button class="btn-update" onclick="updateDashboard()">🔄 Update Dashboard</button>
+        <button class="btn-update" onclick="loadDashboardData()">🔄 Load Live Data</button>
         <button class="btn-reset" onclick="resetFilters()">↺ Reset</button>
       </div>
 
@@ -256,6 +124,7 @@
             <tr>
               <th>Date</th>
               <th>Platform</th>
+              <th>Revenue (¥)</th>
               <th>Spend (¥)</th>
               <th>Clicks</th>
               <th>CV</th>
@@ -264,180 +133,21 @@
             </tr>
           </thead>
           <tbody id="dataTable">
-            <tr><td colspan="7" style="text-align:center;padding:40px;">Click "Update Dashboard"</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:40px;">Click "Load Live Data"</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Product Analysis Sheet -->
-    <div id="product" class="sheet-content">
+    <div id="summary" class="sheet-content">
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">🛍️ Product Analysis</h2>
+        <h2 style="margin-bottom: 15px;">📈 30-Day Summary</h2>
         <table>
           <thead>
-            <tr>
-              <th>Product</th>
-              <th>Category</th>
-              <th>Platform</th>
-              <th>Campaign</th>
-              <th>Revenue (¥)</th>
-              <th>Conversions</th>
-            </tr>
+            <tr><th>Metric</th><th>Value</th><th>Unit</th></tr>
           </thead>
-          <tbody>
-            <tr>
-              <td>Premium Package A</td>
-              <td>Software</td>
-              <td>Google</td>
-              <td>Search Campaign 1</td>
-              <td>¥120,000</td>
-              <td>8</td>
-            </tr>
-            <tr>
-              <td>Premium Package B</td>
-              <td>Software</td>
-              <td>Meta</td>
-              <td>Facebook Campaign A</td>
-              <td>¥90,000</td>
-              <td>6</td>
-            </tr>
-            <tr>
-              <td>Standard Package</td>
-              <td>Services</td>
-              <td>Google</td>
-              <td>Search Campaign 2</td>
-              <td>¥75,000</td>
-              <td>5</td>
-            </tr>
-            <tr>
-              <td>Basic Plan</td>
-              <td>Services</td>
-              <td>Meta</td>
-              <td>Instagram Campaign B</td>
-              <td>¥60,000</td>
-              <td>4</td>
-            </tr>
-            <tr>
-              <td>Enterprise Solution</td>
-              <td>Consulting</td>
-              <td>Google</td>
-              <td>Search Campaign 1</td>
-              <td>¥150,000</td>
-              <td>10</td>
-            </tr>
-            <tr>
-              <td>Custom Integration</td>
-              <td>Consulting</td>
-              <td>Meta</td>
-              <td>Facebook Campaign A</td>
-              <td>¥105,000</td>
-              <td>7</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Daily Sheet -->
-    <div id="daily" class="sheet-content">
-      <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📅 Daily Performance</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Revenue (¥)</th>
-              <th>Conversions</th>
-              <th>Avg Revenue/CV</th>
-              <th>ROAS</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>2024-11-20</td>
-              <td>¥124,500</td>
-              <td>4</td>
-              <td>¥31,125</td>
-              <td>1.65x</td>
-            </tr>
-            <tr>
-              <td>2024-11-21</td>
-              <td>¥141,000</td>
-              <td>5</td>
-              <td>¥28,200</td>
-              <td>1.88x</td>
-            </tr>
-            <tr>
-              <td>2024-11-22</td>
-              <td>¥109,500</td>
-              <td>3</td>
-              <td>¥36,500</td>
-              <td>1.46x</td>
-            </tr>
-            <tr>
-              <td>2024-11-23</td>
-              <td>¥151,500</td>
-              <td>6</td>
-              <td>¥25,250</td>
-              <td>2.02x</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Weekly Sheet -->
-    <div id="weekly" class="sheet-content">
-      <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📊 Weekly Performance</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Week</th>
-              <th>Revenue (¥)</th>
-              <th>Conversions</th>
-              <th>Avg CPA (¥)</th>
-              <th>ROAS</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>W47 (Nov 20-23)</td>
-              <td>¥526,500</td>
-              <td>18</td>
-              <td>¥29,250</td>
-              <td>1.76x</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Monthly Sheet -->
-    <div id="monthly" class="sheet-content">
-      <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📈 Monthly Performance</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Revenue (¥)</th>
-              <th>Conversions</th>
-              <th>Estimated Ad Cost (¥)</th>
-              <th>CPA (¥)</th>
-              <th>ROAS</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>2024-11</td>
-              <td>¥813,150</td>
-              <td>35</td>
-              <td>¥244,000</td>
-              <td>¥6,971</td>
-              <td>1.72x</td>
-            </tr>
+          <tbody id="summaryTable">
+            <tr><td colspan="3" style="text-align:center;padding:40px;">Click "Load Live Data"</td></tr>
           </tbody>
         </table>
       </div>
@@ -445,112 +155,124 @@
   </div>
 
   <script>
-    const sampleData = [
-      { date: '11/20', platform: 'Google', spendUSD: 450, clicks: 15, cv: 2 },
-      { date: '11/20', platform: 'Meta', spendUSD: 380, clicks: 12, cv: 2 },
-      { date: '11/21', platform: 'Google', spendUSD: 520, clicks: 18, cv: 3 },
-      { date: '11/21', platform: 'Meta', spendUSD: 420, clicks: 14, cv: 2 },
-      { date: 'W47', platform: 'Google', spendUSD: 1950, clicks: 45, cv: 10 },
-      { date: 'W47', platform: 'Meta', spendUSD: 1560, clicks: 38, cv: 8 },
-      { date: '2024-11', platform: 'Google', spendUSD: 3271, clicks: 434, cv: 20 },
-      { date: '2024-11', platform: 'Meta', spendUSD: 2150, clicks: 312, cv: 15 },
-    ];
+    const SHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM';
+    let allData = [];
 
-    const USD_TO_JPY = 150;
-
-    function switchSheet(sheetName) {
+    function switchSheet(name) {
       document.querySelectorAll('.sheet-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.sheet-tab').forEach(el => el.classList.remove('active'));
-      document.getElementById(sheetName).classList.add('active');
+      document.getElementById(name).classList.add('active');
       event.target.classList.add('active');
     }
 
-    function updateDashboard() {
-      const startDate = document.getElementById('startDate').value;
-      const endDate = document.getElementById('endDate').value;
-      const platform = document.getElementById('platform').value;
+    function parseCSV(csv) {
+      const lines = csv.trim().split('\n');
+      const headers = lines[0].split(',').map(h => h.trim());
+      const data = [];
+      for (let i = 1; i < lines.length; i++) {
+        const obj = {};
+        const cols = lines[i].split(',').map(v => v.trim());
+        for (let j = 0; j < headers.length; j++) obj[headers[j]] = cols[j];
+        data.push(obj);
+      }
+      return data;
+    }
 
-      showStatus('Loading data...', 'success');
+    function formatNumber(n) { return Math.round(n).toLocaleString('ja-JP'); }
 
-      let summary = { totalSpend: 0, totalCV: 0 };
-      let rows = [];
+    function showStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status show ' + type;
+      if (type !== 'loading') setTimeout(() => el.classList.remove('show'), 3000);
+    }
 
-      sampleData.forEach(item => {
-        const matchPlatform = (platform === 'ALL' || item.platform === platform);
+    async function loadDashboardData() {
+      showStatus('📡 Loading from Google Sheets...', 'loading');
+      try {
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+        const res = await fetch(url);
+        const csv = await res.text();
+        allData = parseCSV(csv);
 
-        if (matchPlatform) {
-          const spendJPY = item.spendUSD * USD_TO_JPY;
-          rows.push({
-            date: item.date,
-            platform: item.platform,
-            spend: spendJPY,
-            clicks: item.clicks,
-            conversions: item.cv
-          });
+        const platform = document.getElementById('platform').value;
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
 
-          summary.totalSpend += spendJPY;
-          summary.totalCV += item.cv;
-        }
-      });
+        const filtered = allData.filter(row => {
+          const match = platform === 'ALL' || row.Platform === platform;
+          return match;
+        });
 
-      displayData({ summary, rows });
-      showStatus('✓ Data loaded successfully', 'success');
+        displayData(filtered);
+        displaySummary(filtered);
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ja-JP');
+        showStatus('✓ Live data loaded!', 'success');
+      } catch(e) {
+        showStatus('✗ Error loading data', 'error');
+        console.error(e);
+      }
     }
 
     function displayData(data) {
-      const totalSpend = data.summary.totalSpend;
-      const totalCV = data.summary.totalCV;
-      const avgCPA = totalCV > 0 ? totalSpend / totalCV : 0;
-      const roas = totalSpend > 0 ? (totalSpend / (totalSpend * 0.3)) : 0;
+      const tbody = document.getElementById('dataTable');
+      tbody.innerHTML = '';
+      let totalSpend = 0, totalCV = 0;
 
+      data.forEach(row => {
+        const spend = parseFloat(row['Spend (¥)']) || 0;
+        const cv = parseFloat(row['Conversions']) || 0;
+        totalSpend += spend;
+        totalCV += cv;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(parseFloat(row['Revenue (¥)']) || 0)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}x</td>`;
+        tbody.appendChild(tr);
+      });
+
+      const avgCPA = totalCV > 0 ? totalSpend / totalCV : 0;
+      const roas = totalSpend > 0 ? (totalSpend / 0.3) / totalSpend : 0;
       document.getElementById('totalSpend').textContent = '¥' + formatNumber(totalSpend);
       document.getElementById('totalCV').textContent = formatNumber(totalCV);
       document.getElementById('avgCPA').textContent = '¥' + formatNumber(avgCPA);
       document.getElementById('roas').textContent = roas.toFixed(2) + 'x';
+    }
 
-      const tbody = document.getElementById('dataTable');
+    function displaySummary(data) {
+      const tbody = document.getElementById('summaryTable');
       tbody.innerHTML = '';
-
-      data.rows.forEach(row => {
-        const cpa = row.conversions > 0 ? row.spend / row.conversions : 0;
-        const roasValue = row.spend > 0 ? (row.spend / (row.spend * 0.3)) : 0;
-
+      let totalRevenue = 0, totalSpend = 0, totalClicks = 0, totalCV = 0;
+      data.forEach(row => {
+        totalRevenue += parseFloat(row['Revenue (¥)']) || 0;
+        totalSpend += parseFloat(row['Spend (¥)']) || 0;
+        totalClicks += parseFloat(row['Clicks']) || 0;
+        totalCV += parseFloat(row['Conversions']) || 0;
+      });
+      const avgCPA = totalCV > 0 ? totalSpend / totalCV : 0;
+      const roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+      const summary = [
+        ['総売上', '¥' + formatNumber(totalRevenue), 'JPY'],
+        ['総広告費', '¥' + formatNumber(totalSpend), 'JPY'],
+        ['総クリック数', formatNumber(totalClicks), '回'],
+        ['総CV数', formatNumber(totalCV), '件'],
+        ['平均CPA', '¥' + formatNumber(avgCPA), 'JPY'],
+        ['平均ROAS', roas.toFixed(2), '倍'],
+      ];
+      summary.forEach(row => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${row.date}</td>
-          <td>${row.platform}</td>
-          <td>¥${formatNumber(row.spend)}</td>
-          <td>${row.clicks}</td>
-          <td>${row.conversions}</td>
-          <td>¥${formatNumber(cpa)}</td>
-          <td>${roasValue.toFixed(2)}x</td>
-        `;
+        tr.innerHTML = `<td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td>`;
         tbody.appendChild(tr);
       });
     }
 
-    function formatNumber(num) {
-      if (!num) return '0';
-      return Math.round(num).toLocaleString('ja-JP');
-    }
-
-    function showStatus(message, type) {
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = message;
-      statusEl.className = 'status show ' + type;
-      setTimeout(() => { statusEl.classList.remove('show'); }, 3000);
-    }
-
     function resetFilters() {
       document.getElementById('startDate').value = '2024-11-20';
-      document.getElementById('endDate').value = '2024-11-23';
+      document.getElementById('endDate').value = '2024-11-30';
       document.getElementById('platform').value = 'ALL';
-      document.getElementById('theme').value = 'purple';
-      updateDashboard();
+      loadDashboardData();
     }
 
-    // Load data on page load
-    updateDashboard();
+    setInterval(loadDashboardData, 5 * 60 * 1000);
+    window.addEventListener('load', loadDashboardData);
   </script>
 </body>
 </html>

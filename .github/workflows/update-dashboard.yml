@@ -1,0 +1,53 @@
+name: Auto Update Dashboard
+
+on:
+  schedule:
+    # 毎日 00:00 (UTC+0) = 日本時間 09:00 に実行
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client
+          pip install google-analytics-data
+          pip install gspread
+
+      - name: Create Service Account JSON
+        run: |
+          echo '${{ secrets.SERVICE_ACCOUNT_JSON }}' > service_account.json
+
+      - name: Run dashboard update script
+        env:
+          SERVICE_ACCOUNT_JSON_PATH: service_account.json
+        run: |
+          python scripts/auto_update_dashboard.py
+
+      - name: Clean up secrets
+        if: always()
+        run: rm -f service_account.json
+
+      - name: Commit and push if changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add -A
+            git commit -m "Auto: Update dashboard data - $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          fi
