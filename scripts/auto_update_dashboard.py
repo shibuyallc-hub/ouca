@@ -7,6 +7,7 @@ GA4 property reporting currency is JPY, so no currency conversion is applied.
 
 import json
 import os
+import requests
 from datetime import datetime, timedelta
 from google.oauth2 import service_account
 import gspread
@@ -18,6 +19,15 @@ from collections import defaultdict
 SERVICE_ACCOUNT_JSON_PATH = os.getenv('SERVICE_ACCOUNT_JSON_PATH', 'service_account.json')
 SPREADSHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM'
 GA4_PROPERTY_ID = '544878501'
+
+GOOGLE_ADS_DEVELOPER_TOKEN = os.getenv('GOOGLE_ADS_DEVELOPER_TOKEN')
+GOOGLE_ADS_CLIENT_ID = os.getenv('GOOGLE_ADS_CLIENT_ID')
+GOOGLE_ADS_CLIENT_SECRET = os.getenv('GOOGLE_ADS_CLIENT_SECRET')
+GOOGLE_ADS_REFRESH_TOKEN = os.getenv('GOOGLE_ADS_REFRESH_TOKEN')
+GOOGLE_ADS_CUSTOMER_ID = os.getenv('GOOGLE_ADS_CUSTOMER_ID')
+
+META_ACCESS_TOKEN = os.getenv('META_ACCESS_TOKEN')
+META_AD_ACCOUNT_ID = os.getenv('META_AD_ACCOUNT_ID')
 
 # ===== CREDENTIALS =====
 with open(SERVICE_ACCOUNT_JSON_PATH) as f:
@@ -75,6 +85,82 @@ except Exception as e:
     print(f"  ✗ GA4 Error: {e}")
     ga4_data = []
 
+# ===== FETCH REAL GOOGLE ADS SPEND/CLICKS =====
+print("\n💰 Fetching Google Ads spend data...")
+
+google_ads_daily = {}
+
+if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET,
+        GOOGLE_ADS_REFRESH_TOKEN, GOOGLE_ADS_CUSTOMER_ID]):
+    try:
+        from google.ads.googleads.client import GoogleAdsClient
+
+        googleads_client = GoogleAdsClient.load_from_dict({
+            "developer_token": GOOGLE_ADS_DEVELOPER_TOKEN,
+            "client_id": GOOGLE_ADS_CLIENT_ID,
+            "client_secret": GOOGLE_ADS_CLIENT_SECRET,
+            "refresh_token": GOOGLE_ADS_REFRESH_TOKEN,
+            "login_customer_id": GOOGLE_ADS_CUSTOMER_ID,
+            "use_proto_plus": True,
+        })
+
+        ga_ads_service = googleads_client.get_service("GoogleAdsService")
+        gaql = """
+            SELECT segments.date, metrics.cost_micros, metrics.clicks
+            FROM customer
+            WHERE segments.date DURING LAST_30_DAYS
+        """
+        stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql)
+
+        for batch in stream:
+            for row in batch.results:
+                d = row.segments.date.replace('-', '')
+                google_ads_daily[d] = {
+                    'spend': row.metrics.cost_micros / 1_000_000,
+                    'clicks': row.metrics.clicks,
+                }
+
+        print(f"  ✓ {len(google_ads_daily)} days of Google Ads spend data found")
+
+    except Exception as e:
+        print(f"  ✗ Google Ads API error: {e}")
+else:
+    print("  ⚠ Google Ads credentials not fully configured — spend will be 0")
+
+# ===== FETCH REAL META ADS SPEND/CLICKS =====
+print("\n💰 Fetching Meta Ads spend data...")
+
+meta_ads_daily = {}
+
+if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
+    try:
+        since = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        until = datetime.now().strftime('%Y-%m-%d')
+        url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
+        params = {
+            'fields': 'spend,clicks',
+            'time_range': json.dumps({'since': since, 'until': until}),
+            'time_increment': 1,
+            'access_token': META_ACCESS_TOKEN,
+        }
+        resp = requests.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        rows = resp.json().get('data', [])
+
+        for row in rows:
+            d = row['date_start'].replace('-', '')
+            meta_ads_daily[d] = {
+                'spend': float(row.get('spend', 0)),
+                'clicks': int(row.get('clicks', 0)),
+            }
+
+        print(f"  ✓ {len(meta_ads_daily)} days of Meta Ads spend data found")
+
+    except Exception as e:
+        print(f"  ✗ Meta Ads API error: {e}")
+else:
+    print("  ⚠ Meta Ads credentials not fully configured — spend will be 0")
+
 # ===== PROCESS GA4 DATA =====
 print("\n📈 Processing GA4 data...")
 
@@ -97,6 +183,15 @@ for item in ga4_data:
     else:
         daily_by_date[date]['meta_revenue'] += item['revenue']
         daily_by_date[date]['meta_cv'] += item['conversions']
+
+# Merge in real spend/clicks from Google Ads and Meta Ads
+for date_str, vals in google_ads_daily.items():
+    daily_by_date[date_str]['google_spend'] += vals['spend']
+    daily_by_date[date_str]['google_clicks'] += vals['clicks']
+
+for date_str, vals in meta_ads_daily.items():
+    daily_by_date[date_str]['meta_spend'] += vals['spend']
+    daily_by_date[date_str]['meta_clicks'] += vals['clicks']
 
 print(f"  ✓ Aggregated {len(daily_by_date)} days of data")
 

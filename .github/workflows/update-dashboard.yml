@@ -24,7 +24,9 @@ jobs:
           pip install --upgrade pip
           pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client
           pip install google-analytics-data
+          pip install google-ads
           pip install gspread
+          pip install requests
 
       - name: Create Service Account JSON
         run: |
@@ -33,6 +35,13 @@ jobs:
       - name: Run dashboard update script
         env:
           SERVICE_ACCOUNT_JSON_PATH: service_account.json
+          GOOGLE_ADS_DEVELOPER_TOKEN: ${{ secrets.GOOGLE_ADS_DEVELOPER_TOKEN }}
+          GOOGLE_ADS_CLIENT_ID: ${{ secrets.GOOGLE_ADS_CLIENT_ID }}
+          GOOGLE_ADS_CLIENT_SECRET: ${{ secrets.GOOGLE_ADS_CLIENT_SECRET }}
+          GOOGLE_ADS_REFRESH_TOKEN: ${{ secrets.GOOGLE_ADS_REFRESH_TOKEN }}
+          GOOGLE_ADS_CUSTOMER_ID: ${{ secrets.GOOGLE_ADS_CUSTOMER_ID }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
         run: |
           python scripts/auto_update_dashboard.py
 
