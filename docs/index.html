@@ -17,13 +17,11 @@
     .header h1 { font-size: 28px; margin-bottom: 5px; }
     .header p { font-size: 14px; opacity: 0.9; }
     .last-update { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 10px; }
-    .controls { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
-    @media (max-width: 1024px) { .controls { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 640px) { .controls { grid-template-columns: 1fr; } }
+    .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 15px; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
     .control-group { display: flex; flex-direction: column; }
     .control-group label { font-size: 12px; font-weight: 600; color: #495057; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .control-group input, .control-group select { padding: 10px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 14px; transition: all 0.3s ease; }
-    .control-group input:focus, .control-group select:focus { outline: none; border-color: #2e7d32; box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15); }
+    .control-group select { padding: 10px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 14px; transition: all 0.3s ease; }
+    .control-group select:focus { outline: none; border-color: #2e7d32; box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15); }
     .buttons { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
     @media (max-width: 640px) { .buttons { grid-template-columns: 1fr; } }
     button { padding: 12px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
@@ -55,13 +53,36 @@
     .sheet-content.active { display: block; }
     .login-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
     .login-box { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 40px; max-width: 360px; width: 100%; text-align: center; }
-    .login-box h2 { margin-bottom: 20px; color: #333; font-size: 20px; }
+    .login-box h2 { margin-bottom: 20px; color: #333; font-size: 18px; }
     .login-box input { width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
     .login-box input:focus { outline: none; border-color: #2e7d32; box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15); }
     .login-box button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; }
     .login-error { color: #c62828; font-size: 13px; margin-top: 10px; display: none; }
     .login-error.show { display: block; }
     .app-hidden { display: none; }
+
+    /* ---- Date range picker ---- */
+    .daterange { position: relative; }
+    .daterange-btn { background: white; border: 1px solid #dee2e6; padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #333; cursor: pointer; white-space: nowrap; }
+    .daterange-btn:hover { border-color: #2e7d32; }
+    .daterange-panel { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; background: white; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,0.15); padding: 12px; width: 260px; }
+    .daterange-presets { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; margin-bottom: 10px; }
+    .daterange-preset-btn { text-align: left; background: none; border: none; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 400; color: #333; cursor: pointer; }
+    .daterange-preset-btn:hover { background: #f1f3f5; }
+    .daterange-preset-btn.active { background: #e8f5e9; color: #2e7d32; font-weight: 600; }
+    .daterange-custom { display: flex; align-items: center; gap: 6px; border-top: 1px solid #e9ecef; padding-top: 10px; }
+    .daterange-custom input { flex: 1; min-width: 0; padding: 6px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 12px; }
+    .daterange-apply { padding: 6px 10px; font-size: 12px; }
+
+    /* ---- Charts ---- */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; border-bottom: 1px solid #e9ecef; }
+    @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-card { background: #f8f9fa; border-radius: 8px; padding: 15px; }
+    .chart-card h3 { font-size: 14px; color: #495057; margin-bottom: 10px; }
+    .chart-card canvas { width: 100%; height: 220px; display: block; }
+    .chart-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: #495057; }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .chart-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   </style>
 </head>
 <body>
@@ -94,12 +115,30 @@
     <div id="dashboard" class="sheet-content active">
       <div class="controls">
         <div class="control-group">
-          <label>📅 開始日</label>
-          <input type="date" id="startDate" value="2024-11-20">
-        </div>
-        <div class="control-group">
-          <label>📅 終了日</label>
-          <input type="date" id="endDate" value="2024-11-30">
+          <label>📅 期間</label>
+          <div class="daterange" id="adsRange">
+            <button type="button" class="daterange-btn"><span class="daterange-label">過去30日間</span> ▾</button>
+            <div class="daterange-panel">
+              <div class="daterange-presets">
+                <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
+                <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
+                <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
+                <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
+                <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
+                <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
+                <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
+              </div>
+              <div class="daterange-custom">
+                <input type="date" class="daterange-start">
+                <span>〜</span>
+                <input type="date" class="daterange-end">
+                <button type="button" class="btn-update daterange-apply">適用</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="control-group">
           <label>📊 媒体</label>
@@ -112,7 +151,7 @@
       </div>
 
       <div class="buttons">
-        <button class="btn-update" onclick="loadDashboardData()">🔄 最新データを取得</button>
+        <button class="btn-update" onclick="loadAllData()">🔄 最新データを取得</button>
         <button class="btn-reset" onclick="resetFilters()">↺ リセット</button>
       </div>
 
@@ -134,6 +173,25 @@
         <div class="kpi-card">
           <div class="kpi-label">ROAS</div>
           <div class="kpi-value" id="roas">0倍</div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>週別（売上・広告費）</h3>
+          <canvas id="adsWeeklyChart"></canvas>
+          <div class="chart-legend">
+            <span><i style="background:#2e7d32"></i>売上</span>
+            <span><i style="background:#f9a825"></i>広告費</span>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>月別（売上・広告費）</h3>
+          <canvas id="adsMonthlyChart"></canvas>
+          <div class="chart-legend">
+            <span><i style="background:#2e7d32"></i>売上</span>
+            <span><i style="background:#f9a825"></i>広告費</span>
+          </div>
         </div>
       </div>
 
@@ -160,7 +218,7 @@
 
     <div id="summary" class="sheet-content">
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📈 過去30日間のサマリー</h2>
+        <h2 style="margin-bottom: 15px;">📈 サマリー（広告効果タブで選択中の期間）</h2>
         <table>
           <thead>
             <tr><th>指標</th><th>値</th><th>単位</th></tr>
@@ -173,27 +231,76 @@
     </div>
 
     <div id="traffic" class="sheet-content">
+      <div class="controls">
+        <div class="control-group">
+          <label>📅 期間</label>
+          <div class="daterange" id="trafficRange">
+            <button type="button" class="daterange-btn"><span class="daterange-label">過去30日間</span> ▾</button>
+            <div class="daterange-panel">
+              <div class="daterange-presets">
+                <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
+                <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
+                <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
+                <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
+                <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
+                <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
+                <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
+              </div>
+              <div class="daterange-custom">
+                <input type="date" class="daterange-start">
+                <span>〜</span>
+                <input type="date" class="daterange-end">
+                <button type="button" class="btn-update daterange-apply">適用</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="summary" style="border-bottom:none;">
         <div class="kpi-card">
           <div class="kpi-label">本日のPV</div>
           <div class="kpi-value" id="todayPV">0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">30日間 総セッション数</div>
+          <div class="kpi-label">選択期間 総セッション数</div>
           <div class="kpi-value" id="totalSessions">0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">30日間 総PV数</div>
+          <div class="kpi-label">選択期間 総PV数</div>
           <div class="kpi-value" id="totalPV">0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">30日間 総CV数</div>
+          <div class="kpi-label">選択期間 総CV数</div>
           <div class="kpi-value" id="trafficTotalCV">0</div>
         </div>
       </div>
       <p style="padding:0 20px;font-size:12px;color:#868e96;">※本日のPVは1日1回（朝9時）の自動更新時点の数値です。リアルタイムの数値ではありません。</p>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>週別（セッション数・PV数）</h3>
+          <canvas id="trafficWeeklyChart"></canvas>
+          <div class="chart-legend">
+            <span><i style="background:#1565c0"></i>セッション数</span>
+            <span><i style="background:#2e7d32"></i>PV数</span>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>月別（セッション数・PV数）</h3>
+          <canvas id="trafficMonthlyChart"></canvas>
+          <div class="chart-legend">
+            <span><i style="background:#1565c0"></i>セッション数</span>
+            <span><i style="background:#2e7d32"></i>PV数</span>
+          </div>
+        </div>
+      </div>
+
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">🌐 流入経路別（過去30日間）</h2>
+        <h2 style="margin-bottom: 15px;">🌐 流入経路別（選択期間）</h2>
         <table>
           <thead>
             <tr><th>流入経路</th><th>セッション数</th><th>PV数</th><th>CV数</th></tr>
@@ -206,6 +313,44 @@
     </div>
 
     <div id="product" class="sheet-content">
+      <div class="controls">
+        <div class="control-group">
+          <label>📅 期間</label>
+          <div class="daterange" id="productRange">
+            <button type="button" class="daterange-btn"><span class="daterange-label">過去30日間</span> ▾</button>
+            <div class="daterange-panel">
+              <div class="daterange-presets">
+                <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
+                <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
+                <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
+                <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
+                <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
+                <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
+                <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
+                <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
+              </div>
+              <div class="daterange-custom">
+                <input type="date" class="daterange-start">
+                <span>〜</span>
+                <input type="date" class="daterange-end">
+                <button type="button" class="btn-update daterange-apply">適用</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>🛍️ 流入区分</label>
+          <select id="productChannel">
+            <option value="ALL">すべて</option>
+            <option value="Google広告">Google広告</option>
+            <option value="Meta広告">Meta広告</option>
+            <option value="その他">その他（自然流入など）</option>
+          </select>
+        </div>
+      </div>
+
       <div class="summary" style="grid-template-columns: repeat(2, 1fr); border-bottom:none;">
         <div class="kpi-card">
           <div class="kpi-label">総購入数</div>
@@ -216,14 +361,28 @@
           <div class="kpi-value" id="totalProductRevenue">¥0</div>
         </div>
       </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>週別 売上</h3>
+          <canvas id="productWeeklyChart"></canvas>
+          <div class="chart-legend"><span><i style="background:#2e7d32"></i>売上</span></div>
+        </div>
+        <div class="chart-card">
+          <h3>月別 売上</h3>
+          <canvas id="productMonthlyChart"></canvas>
+          <div class="chart-legend"><span><i style="background:#2e7d32"></i>売上</span></div>
+        </div>
+      </div>
+
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">🛍️ 商品別 購入実績（過去30日間）</h2>
+        <h2 style="margin-bottom: 15px;">🛍️ 商品別 購入実績（選択期間）</h2>
         <table>
           <thead>
-            <tr><th>商品名</th><th>購入数</th><th>売上(¥)</th></tr>
+            <tr><th>商品名</th><th>流入区分</th><th>購入数</th><th>売上(¥)</th></tr>
           </thead>
           <tbody id="productTable">
-            <tr><td colspan="3" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+            <tr><td colspan="4" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -257,12 +416,15 @@
     }
 
     function startDashboard() {
+      initDateRangePickers();
       loadAllData();
       setInterval(loadAllData, 5 * 60 * 1000);
     }
 
     const SHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM';
-    let allData = [];
+    let allAdsData = [];
+    let allTrafficData = [];
+    let allProductData = [];
 
     function switchSheet(name) {
       document.querySelectorAll('.sheet-content').forEach(el => el.classList.remove('active'));
@@ -306,7 +468,7 @@
       return data;
     }
 
-    function formatNumber(n) { return Math.round(n).toLocaleString('ja-JP'); }
+    function formatNumber(n) { return Math.round(n || 0).toLocaleString('ja-JP'); }
 
     function showStatus(msg, type) {
       const el = document.getElementById('status');
@@ -315,14 +477,218 @@
       if (type !== 'loading') setTimeout(() => el.classList.remove('show'), 3000);
     }
 
+    // ===================== DATE HELPERS =====================
+    function todayLocal() {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    function addDays(d, n) {
+      const r = new Date(d);
+      r.setDate(r.getDate() + n);
+      return r;
+    }
+    function formatISO(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    const PRESETS = {
+      today: () => { const t = todayLocal(); return [t, t]; },
+      yesterday: () => { const t = addDays(todayLocal(), -1); return [t, t]; },
+      thisWeek: () => { const t = todayLocal(); return [addDays(t, -t.getDay()), t]; },
+      last7: () => { const t = todayLocal(); return [addDays(t, -6), t]; },
+      lastWeek: () => {
+        const t = todayLocal();
+        const thisSun = addDays(t, -t.getDay());
+        const lastSat = addDays(thisSun, -1);
+        const lastSun = addDays(lastSat, -6);
+        return [lastSun, lastSat];
+      },
+      last14: () => { const t = todayLocal(); return [addDays(t, -13), t]; },
+      thisMonth: () => { const t = todayLocal(); return [new Date(t.getFullYear(), t.getMonth(), 1), t]; },
+      last30: () => { const t = todayLocal(); return [addDays(t, -29), t]; },
+      lastMonth: () => {
+        const t = todayLocal();
+        const firstThis = new Date(t.getFullYear(), t.getMonth(), 1);
+        const lastPrev = addDays(firstThis, -1);
+        const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
+        return [firstPrev, lastPrev];
+      },
+      allTime: () => { return [new Date(2000, 0, 1), todayLocal()]; },
+    };
+
+    const PRESET_NAMES = {
+      today: '今日', yesterday: '昨日', thisWeek: '今週', last7: '過去7日間',
+      lastWeek: '先週', last14: '過去14日間', thisMonth: '今月', last30: '過去30日間',
+      lastMonth: '先月', allTime: '全期間', custom: 'カスタム'
+    };
+
+    const dateRangeStates = {};
+
+    function initDateRangePickers() {
+      ['adsRange', 'trafficRange', 'productRange'].forEach(id => {
+        const rootEl = document.getElementById(id);
+        createDateRangePicker(rootEl, 'last30', (start, end) => {
+          dateRangeStates[id] = { start, end };
+          if (id === 'adsRange') renderAdsTab();
+          if (id === 'trafficRange') renderTrafficTab();
+          if (id === 'productRange') renderProductTab();
+        });
+      });
+    }
+
+    function createDateRangePicker(rootEl, defaultPresetKey, onChange) {
+      const btn = rootEl.querySelector('.daterange-btn');
+      const label = rootEl.querySelector('.daterange-label');
+      const panel = rootEl.querySelector('.daterange-panel');
+      const presetBtns = rootEl.querySelectorAll('.daterange-preset-btn');
+      const startInput = rootEl.querySelector('.daterange-start');
+      const endInput = rootEl.querySelector('.daterange-end');
+      const applyBtn = rootEl.querySelector('.daterange-apply');
+
+      function updateLabel(key) {
+        label.textContent = `${PRESET_NAMES[key] || 'カスタム'} (${startInput.value}〜${endInput.value})`;
+      }
+
+      function applyPreset(key) {
+        const [s, e] = PRESETS[key]();
+        startInput.value = formatISO(s);
+        endInput.value = formatISO(e);
+        presetBtns.forEach(b => b.classList.toggle('active', b.dataset.preset === key));
+        updateLabel(key);
+        panel.style.display = 'none';
+        onChange(startInput.value, endInput.value);
+      }
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+      });
+
+      presetBtns.forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+
+      applyBtn.addEventListener('click', () => {
+        if (!startInput.value || !endInput.value) return;
+        presetBtns.forEach(b => b.classList.remove('active'));
+        updateLabel('custom');
+        panel.style.display = 'none';
+        onChange(startInput.value, endInput.value);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!rootEl.contains(e.target)) panel.style.display = 'none';
+      });
+
+      applyPreset(defaultPresetKey);
+    }
+
+    function inRange(dateStr, start, end) {
+      return dateStr >= start && dateStr <= end;
+    }
+
+    // ===================== CHART RENDERING =====================
+    function groupByPeriod(rows, dateField, valueFields, periodFn, limit) {
+      const map = {};
+      rows.forEach(r => {
+        const dateVal = r[dateField];
+        if (!dateVal) return;
+        const key = periodFn(dateVal);
+        if (!map[key]) map[key] = {};
+        valueFields.forEach(f => {
+          map[key][f] = (map[key][f] || 0) + (parseFloat(r[f]) || 0);
+        });
+      });
+      const keys = Object.keys(map).sort();
+      const limited = limit ? keys.slice(-limit) : keys;
+      return limited.map(k => ({ key: k, ...map[k] }));
+    }
+
+    function weekKey(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      const sunday = addDays(d, -d.getDay());
+      return formatISO(sunday);
+    }
+    function monthKey(dateStr) { return dateStr.slice(0, 7); }
+
+    function drawMultiBarChart(canvasId, labels, series) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || 500;
+      const cssH = canvas.clientHeight || 220;
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const allValues = series.flatMap(s => s.values);
+      const max = Math.max(1, ...allValues);
+      const padL = 55, padB = 26, padT = 10, padR = 10;
+      const chartW = cssW - padL - padR;
+      const chartH = cssH - padT - padB;
+
+      ctx.strokeStyle = '#e9ecef';
+      ctx.fillStyle = '#868e96';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + chartH - (chartH * i / 4);
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
+        ctx.fillText(formatNumber(max * i / 4), padL - 6, y + 3);
+      }
+
+      const n = Math.max(1, labels.length);
+      const slot = chartW / n;
+      const groupW = Math.min(46, slot * 0.7);
+      const barW = groupW / series.length;
+
+      labels.forEach((label, i) => {
+        series.forEach((s, si) => {
+          const v = s.values[i] || 0;
+          const h = (v / max) * chartH;
+          const x = padL + slot * i + (slot - groupW) / 2 + si * barW;
+          const y = padT + chartH - h;
+          ctx.fillStyle = s.color;
+          ctx.fillRect(x, y, barW - 2, Math.max(h, 0));
+        });
+        ctx.fillStyle = '#495057';
+        ctx.textAlign = 'center';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(label, padL + slot * i + slot / 2, padT + chartH + 15);
+      });
+    }
+
+    function shortLabel(key) {
+      // 'YYYY-MM-DD' (week start) -> 'M/D', 'YYYY-MM' -> 'YYYY/M'
+      if (key.length === 7) {
+        const [y, m] = key.split('-');
+        return `${y}/${parseInt(m, 10)}`;
+      }
+      const [, m, d] = key.split('-');
+      return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
+    }
+
+    // ===================== LOAD DATA =====================
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        await Promise.all([
-          loadDashboardData(),
-          loadTrafficData(),
-          loadProductData(),
+        const [adsCsv, trafficCsv, productCsv] = await Promise.all([
+          fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
+          fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
+          fetch(sheetCsvUrl('商品別')).then(r => r.text()),
         ]);
+        allAdsData = parseCSV(adsCsv);
+        allTrafficData = parseCSV(trafficCsv);
+        allProductData = parseCSV(productCsv);
+
+        renderAdsTab();
+        renderTrafficTab();
+        renderProductTab();
+
         document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ja-JP');
         showStatus('✓ データを取得しました', 'success');
       } catch (e) {
@@ -331,16 +697,34 @@
       }
     }
 
-    async function loadDashboardData() {
-      const res = await fetch(sheetCsvUrl('Live Data'));
-      const csv = await res.text();
-      allData = parseCSV(csv);
-
+    // ===================== ADS TAB =====================
+    function renderAdsTab() {
+      const range = dateRangeStates['adsRange'];
+      if (!range) return;
       const platform = document.getElementById('platform').value;
-      const filtered = allData.filter(row => platform === 'ALL' || row.Platform === platform);
+
+      const filtered = allAdsData.filter(row => {
+        const dateOk = inRange(row.Date, range.start, range.end);
+        const platOk = platform === 'ALL' || row.Platform === platform;
+        return dateOk && platOk;
+      });
 
       displayData(filtered);
       displaySummary(filtered);
+
+      // Charts always use the ALL-platform rows so revenue/spend aren't double counted
+      const allRows = allAdsData.filter(row => row.Platform === 'ALL' && inRange(row.Date, range.start, range.end));
+      const weekly = groupByPeriod(allRows, 'Date', ['Revenue (¥)', 'Spend (¥)'], weekKey, 12);
+      const monthly = groupByPeriod(allRows, 'Date', ['Revenue (¥)', 'Spend (¥)'], monthKey, 12);
+
+      drawMultiBarChart('adsWeeklyChart', weekly.map(w => shortLabel(w.key)), [
+        { name: '売上', color: '#2e7d32', values: weekly.map(w => w['Revenue (¥)']) },
+        { name: '広告費', color: '#f9a825', values: weekly.map(w => w['Spend (¥)']) },
+      ]);
+      drawMultiBarChart('adsMonthlyChart', monthly.map(m => shortLabel(m.key)), [
+        { name: '売上', color: '#2e7d32', values: monthly.map(m => m['Revenue (¥)']) },
+        { name: '広告費', color: '#f9a825', values: monthly.map(m => m['Spend (¥)']) },
+      ]);
     }
 
     function displayData(data) {
@@ -357,6 +741,10 @@
         tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(parseFloat(row['Revenue (¥)']) || 0)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}倍</td>`;
         tbody.appendChild(tr);
       });
+
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+      }
 
       const avgCPA = totalCV > 0 ? totalSpend / totalCV : 0;
       const roas = totalSpend > 0 ? (totalSpend / 0.3) / totalSpend : 0;
@@ -393,17 +781,29 @@
       });
     }
 
-    async function loadTrafficData() {
-      const res = await fetch(sheetCsvUrl('流入経路'));
-      const csv = await res.text();
-      const data = parseCSV(csv);
-      if (data.length === 0) return;
+    // ===================== TRAFFIC TAB =====================
+    function renderTrafficTab() {
+      const range = dateRangeStates['trafficRange'];
+      if (!range || allTrafficData.length === 0) return;
+
+      const filtered = allTrafficData.filter(row => inRange(row['日付'], range.start, range.end));
 
       const byChannel = {};
       let totalSessions = 0, totalPV = 0, totalCV = 0;
       let latestDate = null, todayPV = 0;
 
-      data.forEach(row => {
+      allTrafficData.forEach(row => {
+        const pv = parseFloat(row['PV数']) || 0;
+        if (!row['日付']) return;
+        if (!latestDate || row['日付'] > latestDate) {
+          latestDate = row['日付'];
+          todayPV = pv;
+        } else if (row['日付'] === latestDate) {
+          todayPV += pv;
+        }
+      });
+
+      filtered.forEach(row => {
         const channel = row['流入経路'] || '不明';
         const sessions = parseFloat(row['セッション数']) || 0;
         const pv = parseFloat(row['PV数']) || 0;
@@ -417,13 +817,6 @@
         totalSessions += sessions;
         totalPV += pv;
         totalCV += cv;
-
-        if (row['日付'] && row['日付'] === latestDate) {
-          todayPV += pv;
-        } else if (!latestDate || row['日付'] > latestDate) {
-          latestDate = row['日付'];
-          todayPV = pv;
-        }
       });
 
       document.getElementById('todayPV').textContent = formatNumber(todayPV);
@@ -433,43 +826,94 @@
 
       const tbody = document.getElementById('trafficTable');
       tbody.innerHTML = '';
-      Object.keys(byChannel).sort((a, b) => byChannel[b].sessions - byChannel[a].sessions).forEach(channel => {
+      const channels = Object.keys(byChannel).sort((a, b) => byChannel[b].sessions - byChannel[a].sessions);
+      channels.forEach(channel => {
         const c = byChannel[channel];
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${channel}</td><td>${formatNumber(c.sessions)}</td><td>${formatNumber(c.pv)}</td><td>${formatNumber(c.cv)}</td>`;
         tbody.appendChild(tr);
       });
+      if (channels.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+      }
+
+      const weekly = groupByPeriod(filtered, '日付', ['セッション数', 'PV数'], weekKey, 12);
+      const monthly = groupByPeriod(filtered, '日付', ['セッション数', 'PV数'], monthKey, 12);
+
+      drawMultiBarChart('trafficWeeklyChart', weekly.map(w => shortLabel(w.key)), [
+        { name: 'セッション数', color: '#1565c0', values: weekly.map(w => w['セッション数']) },
+        { name: 'PV数', color: '#2e7d32', values: weekly.map(w => w['PV数']) },
+      ]);
+      drawMultiBarChart('trafficMonthlyChart', monthly.map(m => shortLabel(m.key)), [
+        { name: 'セッション数', color: '#1565c0', values: monthly.map(m => m['セッション数']) },
+        { name: 'PV数', color: '#2e7d32', values: monthly.map(m => m['PV数']) },
+      ]);
     }
 
-    async function loadProductData() {
-      const res = await fetch(sheetCsvUrl('商品別'));
-      const csv = await res.text();
-      const data = parseCSV(csv);
-      if (data.length === 0) return;
+    // ===================== PRODUCT TAB =====================
+    function renderProductTab() {
+      const range = dateRangeStates['productRange'];
+      if (!range) return;
+      const channelFilter = document.getElementById('productChannel').value;
+
+      const filtered = allProductData.filter(row => {
+        const dateOk = inRange(row['日付'], range.start, range.end);
+        const chOk = channelFilter === 'ALL' || row['流入区分'] === channelFilter;
+        return dateOk && chOk;
+      });
 
       let totalPurchased = 0, totalRevenue = 0;
-      const tbody = document.getElementById('productTable');
-      tbody.innerHTML = '';
+      const byProduct = {};
 
-      data.forEach(row => {
+      filtered.forEach(row => {
         const purchased = parseFloat(row['購入数']) || 0;
         const revenue = parseFloat(row['売上(¥)']) || 0;
         totalPurchased += purchased;
         totalRevenue += revenue;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row['商品名'] || ''}</td><td>${formatNumber(purchased)}</td><td>¥${formatNumber(revenue)}</td>`;
-        tbody.appendChild(tr);
+
+        const key = (row['商品名'] || '') + '||' + (row['流入区分'] || '');
+        if (!byProduct[key]) {
+          byProduct[key] = { name: row['商品名'] || '', channel: row['流入区分'] || '', purchased: 0, revenue: 0 };
+        }
+        byProduct[key].purchased += purchased;
+        byProduct[key].revenue += revenue;
       });
 
       document.getElementById('totalPurchased').textContent = formatNumber(totalPurchased);
       document.getElementById('totalProductRevenue').textContent = '¥' + formatNumber(totalRevenue);
+
+      const tbody = document.getElementById('productTable');
+      tbody.innerHTML = '';
+      const rows = Object.values(byProduct).sort((a, b) => b.revenue - a.revenue);
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.name}</td><td>${r.channel}</td><td>${formatNumber(r.purchased)}</td><td>¥${formatNumber(r.revenue)}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+      }
+
+      const weekly = groupByPeriod(filtered, '日付', ['売上(¥)'], weekKey, 12);
+      const monthly = groupByPeriod(filtered, '日付', ['売上(¥)'], monthKey, 12);
+
+      drawMultiBarChart('productWeeklyChart', weekly.map(w => shortLabel(w.key)), [
+        { name: '売上', color: '#2e7d32', values: weekly.map(w => w['売上(¥)']) },
+      ]);
+      drawMultiBarChart('productMonthlyChart', monthly.map(m => shortLabel(m.key)), [
+        { name: '売上', color: '#2e7d32', values: monthly.map(m => m['売上(¥)']) },
+      ]);
     }
 
+    document.getElementById('platform').addEventListener('change', renderAdsTab);
+    document.getElementById('productChannel').addEventListener('change', renderProductTab);
+
     function resetFilters() {
-      document.getElementById('startDate').value = '2024-11-20';
-      document.getElementById('endDate').value = '2024-11-30';
       document.getElementById('platform').value = 'ALL';
-      loadAllData();
+      initDateRangePickers();
+      renderAdsTab();
+      renderTrafficTab();
+      renderProductTab();
     }
   </script>
 </body>

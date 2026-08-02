@@ -65,7 +65,7 @@ try:
             Metric(name="purchaseRevenue"),
             Metric(name="conversions"),
         ],
-        date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
 
     response = ga4_client.run_report(request)
@@ -105,10 +105,12 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
         })
 
         ga_ads_service = googleads_client.get_service("GoogleAdsService")
-        gaql = """
+        gads_start = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+        gads_end = datetime.now().strftime('%Y-%m-%d')
+        gaql = f"""
             SELECT segments.date, metrics.cost_micros, metrics.clicks
             FROM customer
-            WHERE segments.date DURING LAST_30_DAYS
+            WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
         """
         stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql)
 
@@ -134,25 +136,33 @@ meta_ads_daily = {}
 
 if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
     try:
-        since = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        since = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
         until = datetime.now().strftime('%Y-%m-%d')
         url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
         params = {
             'fields': 'spend,clicks',
             'time_range': json.dumps({'since': since, 'until': until}),
             'time_increment': 1,
+            'limit': 500,
             'access_token': META_ACCESS_TOKEN,
         }
-        resp = requests.get(url, params=params, timeout=30)
-        resp.raise_for_status()
-        rows = resp.json().get('data', [])
 
-        for row in rows:
-            d = row['date_start'].replace('-', '')
-            meta_ads_daily[d] = {
-                'spend': float(row.get('spend', 0)),
-                'clicks': int(row.get('clicks', 0)),
-            }
+        next_url = url
+        next_params = params
+        while next_url:
+            resp = requests.get(next_url, params=next_params, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+
+            for row in payload.get('data', []):
+                d = row['date_start'].replace('-', '')
+                meta_ads_daily[d] = {
+                    'spend': float(row.get('spend', 0)),
+                    'clicks': int(row.get('clicks', 0)),
+                }
+
+            next_url = payload.get('paging', {}).get('next')
+            next_params = None  # 'next' already includes all query params
 
         print(f"  ✓ {len(meta_ads_daily)} days of Meta Ads spend data found")
 
@@ -213,7 +223,7 @@ try:
             Metric(name="screenPageViews"),
             Metric(name="conversions"),
         ],
-        date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
     response_traffic = ga4_client.run_report(request_traffic)
     traffic_data = []
@@ -236,27 +246,41 @@ except Exception as e:
 # ===== FETCH PRODUCT-LEVEL PURCHASE DATA =====
 print("\n🛍️ Fetching product-level purchase data...")
 
+def channel_to_bucket(channel):
+    if channel == 'Paid Search':
+        return 'Google広告'
+    if channel == 'Paid Social':
+        return 'Meta広告'
+    return 'その他'
+
+
 try:
     request_product = RunReportRequest(
         property=f"properties/{GA4_PROPERTY_ID}",
-        dimensions=[Dimension(name="itemName")],
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="itemName"),
+            Dimension(name="sessionDefaultChannelGroup"),
+        ],
         metrics=[
             Metric(name="itemsPurchased"),
             Metric(name="itemRevenue"),
         ],
-        date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
     response_product = ga4_client.run_report(request_product)
     product_data = []
 
     for row in response_product.rows:
         product_data.append({
-            'name': row.dimension_values[0].value,
+            'date': row.dimension_values[0].value,
+            'name': row.dimension_values[1].value,
+            'channel_bucket': channel_to_bucket(row.dimension_values[2].value),
             'purchased': int(float(row.metric_values[0].value)),
             'revenue': float(row.metric_values[1].value),
         })
 
-    print(f"  ✓ {len(product_data)} products found")
+    print(f"  ✓ {len(product_data)} product/channel/date records found")
 
 except Exception as e:
     print(f"  ✗ Product data error: {e}")
@@ -274,7 +298,7 @@ try:
     ws_data = sheet.worksheet(sheet_name)
     ws_data.clear()
 except:
-    ws_data = sheet.add_worksheet(sheet_name, rows=500, cols=12)
+    ws_data = sheet.add_worksheet(sheet_name, rows=3000, cols=12)
 
 # Headers
 headers = [
@@ -316,9 +340,9 @@ for date_str in sorted(daily_by_date.keys()):
         cpa = spend_jpy / cv if cv > 0 else 0
         roas = revenue_jpy / spend_jpy if spend_jpy > 0 else 0
 
-        # Format date
+        # Format date (ISO so the frontend can filter/sort by real date)
         date_obj = datetime.strptime(date_str, '%Y%m%d')
-        formatted_date = date_obj.strftime('%m/%d')
+        formatted_date = date_obj.strftime('%Y-%m-%d')
 
         rows_data.append([
             formatted_date,
@@ -363,7 +387,7 @@ cpa_avg = total_spend_jpy / total_cv if total_cv > 0 else 0
 roas_avg = total_revenue_jpy / total_spend_jpy if total_spend_jpy > 0 else 0
 
 ws_summary.append_rows([
-    ['【30日間サマリー】', '', ''],
+    ['【集計期間: 過去365日】', '', ''],
     ['', '', ''],
     ['Metric', 'Value', 'Currency'],
     ['総売上', round(total_revenue_jpy, 0), '¥'],
@@ -386,14 +410,14 @@ try:
     ws_traffic = sheet.worksheet(sheet_name_traffic)
     ws_traffic.clear()
 except:
-    ws_traffic = sheet.add_worksheet(sheet_name_traffic, rows=1000, cols=8)
+    ws_traffic = sheet.add_worksheet(sheet_name_traffic, rows=6000, cols=8)
 
 rows_traffic = [['日付', '流入経路', 'セッション数', 'PV数', 'CV数', '更新日時']]
 
 for item in sorted(traffic_data, key=lambda x: x['date']):
     date_obj = datetime.strptime(item['date'], '%Y%m%d')
     rows_traffic.append([
-        date_obj.strftime('%m/%d'),
+        date_obj.strftime('%Y-%m-%d'),
         item['channel'],
         item['sessions'],
         item['pageviews'],
@@ -412,13 +436,16 @@ try:
     ws_product = sheet.worksheet(sheet_name_product)
     ws_product.clear()
 except:
-    ws_product = sheet.add_worksheet(sheet_name_product, rows=300, cols=6)
+    ws_product = sheet.add_worksheet(sheet_name_product, rows=6000, cols=8)
 
-rows_product = [['商品名', '購入数', '売上(¥)', '更新日時']]
+rows_product = [['日付', '商品名', '流入区分', '購入数', '売上(¥)', '更新日時']]
 
-for item in sorted(product_data, key=lambda x: -x['revenue']):
+for item in sorted(product_data, key=lambda x: (x['date'], -x['revenue'])):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
     rows_product.append([
+        date_obj.strftime('%Y-%m-%d'),
         item['name'],
+        item['channel_bucket'],
         item['purchased'],
         round(item['revenue'], 0),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
