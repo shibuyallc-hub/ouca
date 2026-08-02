@@ -59,7 +59,7 @@ try:
         property=f"properties/{GA4_PROPERTY_ID}",
         dimensions=[
             Dimension(name="date"),
-            Dimension(name="sessionSource"),
+            Dimension(name="sessionDefaultChannelGroup"),
         ],
         metrics=[
             Metric(name="purchaseRevenue"),
@@ -74,7 +74,7 @@ try:
     for row in response.rows:
         ga4_data.append({
             'date': row.dimension_values[0].value,
-            'source': row.dimension_values[1].value,
+            'channel': row.dimension_values[1].value,
             'revenue': float(row.metric_values[0].value),
             'conversions': int(row.metric_values[1].value),
         })
@@ -173,14 +173,17 @@ daily_by_date = defaultdict(lambda: {
 
 for item in ga4_data:
     date = item['date']
-    is_google = 'google' in item['source'].lower() or 'organic' in item['source'].lower()
+    channel = item['channel']
 
-    # No Google Ads / Meta Ads API is connected, so spend and clicks are
-    # unknown until real ad campaigns and their APIs are wired in.
-    if is_google:
+    # Only attribute revenue/conversions to a platform when GA4 says the
+    # session actually came from a paid channel for that platform.
+    # Organic search, direct, referral, organic social, etc. are real
+    # traffic but are not ad-driven, so they are excluded from both buckets
+    # rather than being dumped into "Meta" by default.
+    if channel == 'Paid Search':
         daily_by_date[date]['google_revenue'] += item['revenue']
         daily_by_date[date]['google_cv'] += item['conversions']
-    else:
+    elif channel == 'Paid Social':
         daily_by_date[date]['meta_revenue'] += item['revenue']
         daily_by_date[date]['meta_cv'] += item['conversions']
 
