@@ -391,6 +391,10 @@
 
   <script>
     const SITE_PASSWORD = 'ouca2026';
+    const SHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM';
+    let allAdsData = [];
+    let allTrafficData = [];
+    let allProductData = [];
 
     function checkLogin() {
       const input = document.getElementById('loginPassword');
@@ -420,11 +424,6 @@
       loadAllData();
       setInterval(loadAllData, 5 * 60 * 1000);
     }
-
-    const SHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM';
-    let allAdsData = [];
-    let allTrafficData = [];
-    let allProductData = [];
 
     function switchSheet(name) {
       document.querySelectorAll('.sheet-content').forEach(el => el.classList.remove('active'));

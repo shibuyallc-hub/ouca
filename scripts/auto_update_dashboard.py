@@ -12,7 +12,18 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 import gspread
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import RunReportRequest, Dimension, Metric, DateRange
+from google.analytics.data_v1beta.types import (
+    RunReportRequest, Dimension, Metric, DateRange, FilterExpression, Filter
+)
+
+# Only the 'purchase' event counts as a conversion for this dashboard,
+# regardless of whatever else GA4 admin has marked as a "key event".
+PURCHASE_ONLY_FILTER = FilterExpression(
+    filter=Filter(
+        field_name="eventName",
+        string_filter=Filter.StringFilter(value="purchase"),
+    )
+)
 from collections import defaultdict
 
 # ===== CONFIGURATION =====
@@ -63,8 +74,9 @@ try:
         ],
         metrics=[
             Metric(name="purchaseRevenue"),
-            Metric(name="conversions"),
+            Metric(name="eventCount"),
         ],
+        dimension_filter=PURCHASE_ONLY_FILTER,
         date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
 
@@ -212,6 +224,8 @@ print(f"  ✓ Aggregated {len(daily_by_date)} days of data")
 print("\n🌐 Fetching traffic source data...")
 
 try:
+    # Sessions/pageviews must NOT be filtered to purchase events - that
+    # would restrict them to only sessions that happened to purchase.
     request_traffic = RunReportRequest(
         property=f"properties/{GA4_PROPERTY_ID}",
         dimensions=[
@@ -221,22 +235,50 @@ try:
         metrics=[
             Metric(name="sessions"),
             Metric(name="screenPageViews"),
-            Metric(name="conversions"),
         ],
         date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
     response_traffic = ga4_client.run_report(request_traffic)
-    traffic_data = []
+    traffic_map = {}
 
     for row in response_traffic.rows:
-        traffic_data.append({
+        key = (row.dimension_values[0].value, row.dimension_values[1].value)
+        traffic_map[key] = {
             'date': row.dimension_values[0].value,
             'channel': row.dimension_values[1].value,
             'sessions': int(float(row.metric_values[0].value)),
             'pageviews': int(float(row.metric_values[1].value)),
-            'conversions': int(float(row.metric_values[2].value)),
-        })
+            'conversions': 0,
+        }
 
+    # Purchases by date/channel, merged into the same rows above.
+    request_traffic_cv = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="sessionDefaultChannelGroup"),
+        ],
+        metrics=[Metric(name="eventCount")],
+        dimension_filter=PURCHASE_ONLY_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_traffic_cv = ga4_client.run_report(request_traffic_cv)
+
+    for row in response_traffic_cv.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value)
+        cv = int(float(row.metric_values[0].value))
+        if key in traffic_map:
+            traffic_map[key]['conversions'] = cv
+        else:
+            traffic_map[key] = {
+                'date': row.dimension_values[0].value,
+                'channel': row.dimension_values[1].value,
+                'sessions': 0,
+                'pageviews': 0,
+                'conversions': cv,
+            }
+
+    traffic_data = list(traffic_map.values())
     print(f"  ✓ {len(traffic_data)} traffic source records found")
 
 except Exception as e:
