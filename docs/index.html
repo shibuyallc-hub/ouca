@@ -112,6 +112,13 @@
       <button class="sheet-tab" onclick="switchSheet('product')">🛍️ 商品別</button>
     </div>
 
+    <div class="buttons">
+      <button class="btn-update" onclick="loadAllData()">🔄 最新データを取得</button>
+      <button class="btn-reset" onclick="resetFilters()">↺ リセット</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
     <div id="dashboard" class="sheet-content active">
       <div class="controls">
         <div class="control-group">
@@ -149,13 +156,6 @@
           </select>
         </div>
       </div>
-
-      <div class="buttons">
-        <button class="btn-update" onclick="loadAllData()">🔄 最新データを取得</button>
-        <button class="btn-reset" onclick="resetFilters()">↺ リセット</button>
-      </div>
-
-      <div class="status" id="status"></div>
 
       <div class="summary">
         <div class="kpi-card">
