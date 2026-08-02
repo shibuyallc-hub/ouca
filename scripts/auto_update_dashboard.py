@@ -63,7 +63,7 @@ try:
         ],
         metrics=[
             Metric(name="purchaseRevenue"),
-            Metric(name="eventCount"),
+            Metric(name="conversions"),
         ],
         date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
     )
@@ -76,7 +76,7 @@ try:
             'date': row.dimension_values[0].value,
             'channel': row.dimension_values[1].value,
             'revenue': float(row.metric_values[0].value),
-            'conversions': int(row.metric_values[1].value),
+            'conversions': int(float(row.metric_values[1].value)),
         })
 
     print(f"  ✓ {len(ga4_data)} GA4 records found")
