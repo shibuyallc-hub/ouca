@@ -89,19 +89,14 @@ for item in ga4_data:
     date = item['date']
     is_google = 'google' in item['source'].lower() or 'organic' in item['source'].lower()
 
-    # Estimate spend (30% of revenue)
-    estimated_spend = item['revenue'] * 0.3
-
+    # No Google Ads / Meta Ads API is connected, so spend and clicks are
+    # unknown until real ad campaigns and their APIs are wired in.
     if is_google:
         daily_by_date[date]['google_revenue'] += item['revenue']
         daily_by_date[date]['google_cv'] += item['conversions']
-        daily_by_date[date]['google_spend'] += estimated_spend
-        daily_by_date[date]['google_clicks'] += max(1, int(item['conversions'] * 5))
     else:
         daily_by_date[date]['meta_revenue'] += item['revenue']
         daily_by_date[date]['meta_cv'] += item['conversions']
-        daily_by_date[date]['meta_spend'] += estimated_spend
-        daily_by_date[date]['meta_clicks'] += max(1, int(item['conversions'] * 4))
 
 print(f"  ✓ Aggregated {len(daily_by_date)} days of data")
 
