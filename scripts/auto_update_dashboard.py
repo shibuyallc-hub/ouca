@@ -2,7 +2,7 @@
 """
 OUCA ROI Dashboard - Automatic Data Update
 Fetches GA4 / Google Ads / Meta Ads data and updates Google Sheets daily
-Converts USD → JPY (1 USD = 150 JPY)
+GA4 property reporting currency is JPY, so no currency conversion is applied.
 """
 
 import json
@@ -18,7 +18,6 @@ from collections import defaultdict
 SERVICE_ACCOUNT_JSON_PATH = os.getenv('SERVICE_ACCOUNT_JSON_PATH', 'service_account.json')
 SPREADSHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM'
 GA4_PROPERTY_ID = '544878501'
-USD_TO_JPY = 150
 
 # ===== CREDENTIALS =====
 with open(SERVICE_ACCOUNT_JSON_PATH) as f:
@@ -214,9 +213,9 @@ for date_str in sorted(daily_by_date.keys()):
             clicks = data['google_clicks'] + data['meta_clicks']
             cv = data['google_cv'] + data['meta_cv']
 
-        # Convert to JPY
-        revenue_jpy = revenue * USD_TO_JPY
-        spend_jpy = spend * USD_TO_JPY
+        # GA4 already reports in JPY
+        revenue_jpy = revenue
+        spend_jpy = spend
 
         # Calculate KPIs
         ctr = (clicks / max(1, clicks * 10)) * 100 if clicks > 0 else 0
@@ -262,8 +261,8 @@ total_cv = sum(d['google_cv'] + d['meta_cv'] for d in daily_by_date.values())
 total_spend = sum(d['google_spend'] + d['meta_spend'] for d in daily_by_date.values())
 total_clicks = sum(d['google_clicks'] + d['meta_clicks'] for d in daily_by_date.values())
 
-total_revenue_jpy = total_revenue * USD_TO_JPY
-total_spend_jpy = total_spend * USD_TO_JPY
+total_revenue_jpy = total_revenue
+total_spend_jpy = total_spend
 
 ctr_avg = (total_clicks / max(1, total_clicks * 10)) * 100 if total_clicks > 0 else 0
 cvr_avg = (total_cv / max(1, total_clicks)) * 100 if total_clicks > 0 else 0
@@ -328,7 +327,7 @@ for item in sorted(product_data, key=lambda x: -x['revenue']):
     rows_product.append([
         item['name'],
         item['purchased'],
-        round(item['revenue'] * USD_TO_JPY, 0),
+        round(item['revenue'], 0),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ])
 
