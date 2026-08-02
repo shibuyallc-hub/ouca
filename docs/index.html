@@ -396,6 +396,55 @@
     let allTrafficData = [];
     let allProductData = [];
 
+    // NOTE: these must stay declared before checkLogin()/the auto-login
+    // block below, since a returning visitor with a valid session runs
+    // straight into startDashboard() (and everything it calls) before the
+    // rest of the script has executed. A const/let declared later would
+    // still be in its temporal dead zone at that point.
+    function todayLocal() {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    function addDays(d, n) {
+      const r = new Date(d);
+      r.setDate(r.getDate() + n);
+      return r;
+    }
+
+    const PRESETS = {
+      today: () => { const t = todayLocal(); return [t, t]; },
+      yesterday: () => { const t = addDays(todayLocal(), -1); return [t, t]; },
+      thisWeek: () => { const t = todayLocal(); return [addDays(t, -t.getDay()), t]; },
+      last7: () => { const t = todayLocal(); return [addDays(t, -6), t]; },
+      lastWeek: () => {
+        const t = todayLocal();
+        const thisSun = addDays(t, -t.getDay());
+        const lastSat = addDays(thisSun, -1);
+        const lastSun = addDays(lastSat, -6);
+        return [lastSun, lastSat];
+      },
+      last14: () => { const t = todayLocal(); return [addDays(t, -13), t]; },
+      thisMonth: () => { const t = todayLocal(); return [new Date(t.getFullYear(), t.getMonth(), 1), t]; },
+      last30: () => { const t = todayLocal(); return [addDays(t, -29), t]; },
+      lastMonth: () => {
+        const t = todayLocal();
+        const firstThis = new Date(t.getFullYear(), t.getMonth(), 1);
+        const lastPrev = addDays(firstThis, -1);
+        const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
+        return [firstPrev, lastPrev];
+      },
+      allTime: () => { return [new Date(2000, 0, 1), todayLocal()]; },
+    };
+
+    const PRESET_NAMES = {
+      today: '今日', yesterday: '昨日', thisWeek: '今週', last7: '過去7日間',
+      lastWeek: '先週', last14: '過去14日間', thisMonth: '今月', last30: '過去30日間',
+      lastMonth: '先月', allTime: '全期間', custom: 'カスタム'
+    };
+
+    const dateRangeStates = {};
+
     function checkLogin() {
       const input = document.getElementById('loginPassword');
       const error = document.getElementById('loginError');
@@ -477,55 +526,12 @@
     }
 
     // ===================== DATE HELPERS =====================
-    function todayLocal() {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    function addDays(d, n) {
-      const r = new Date(d);
-      r.setDate(r.getDate() + n);
-      return r;
-    }
     function formatISO(d) {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
     }
-
-    const PRESETS = {
-      today: () => { const t = todayLocal(); return [t, t]; },
-      yesterday: () => { const t = addDays(todayLocal(), -1); return [t, t]; },
-      thisWeek: () => { const t = todayLocal(); return [addDays(t, -t.getDay()), t]; },
-      last7: () => { const t = todayLocal(); return [addDays(t, -6), t]; },
-      lastWeek: () => {
-        const t = todayLocal();
-        const thisSun = addDays(t, -t.getDay());
-        const lastSat = addDays(thisSun, -1);
-        const lastSun = addDays(lastSat, -6);
-        return [lastSun, lastSat];
-      },
-      last14: () => { const t = todayLocal(); return [addDays(t, -13), t]; },
-      thisMonth: () => { const t = todayLocal(); return [new Date(t.getFullYear(), t.getMonth(), 1), t]; },
-      last30: () => { const t = todayLocal(); return [addDays(t, -29), t]; },
-      lastMonth: () => {
-        const t = todayLocal();
-        const firstThis = new Date(t.getFullYear(), t.getMonth(), 1);
-        const lastPrev = addDays(firstThis, -1);
-        const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
-        return [firstPrev, lastPrev];
-      },
-      allTime: () => { return [new Date(2000, 0, 1), todayLocal()]; },
-    };
-
-    const PRESET_NAMES = {
-      today: '今日', yesterday: '昨日', thisWeek: '今週', last7: '過去7日間',
-      lastWeek: '先週', last14: '過去14日間', thisMonth: '今月', last30: '過去30日間',
-      lastMonth: '先月', allTime: '全期間', custom: 'カスタム'
-    };
-
-    const dateRangeStates = {};
 
     function initDateRangePickers() {
       ['adsRange', 'trafficRange', 'productRange'].forEach(id => {
