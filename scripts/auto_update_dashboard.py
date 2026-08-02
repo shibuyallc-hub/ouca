@@ -106,6 +106,70 @@ for item in ga4_data:
 
 print(f"  ✓ Aggregated {len(daily_by_date)} days of data")
 
+# ===== FETCH TRAFFIC SOURCE DATA =====
+print("\n🌐 Fetching traffic source data...")
+
+try:
+    request_traffic = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="sessionDefaultChannelGroup"),
+        ],
+        metrics=[
+            Metric(name="sessions"),
+            Metric(name="screenPageViews"),
+            Metric(name="conversions"),
+        ],
+        date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+    )
+    response_traffic = ga4_client.run_report(request_traffic)
+    traffic_data = []
+
+    for row in response_traffic.rows:
+        traffic_data.append({
+            'date': row.dimension_values[0].value,
+            'channel': row.dimension_values[1].value,
+            'sessions': int(float(row.metric_values[0].value)),
+            'pageviews': int(float(row.metric_values[1].value)),
+            'conversions': int(float(row.metric_values[2].value)),
+        })
+
+    print(f"  ✓ {len(traffic_data)} traffic source records found")
+
+except Exception as e:
+    print(f"  ✗ Traffic source error: {e}")
+    traffic_data = []
+
+# ===== FETCH PRODUCT-LEVEL PURCHASE DATA =====
+print("\n🛍️ Fetching product-level purchase data...")
+
+try:
+    request_product = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[Dimension(name="itemName")],
+        metrics=[
+            Metric(name="itemsPurchased"),
+            Metric(name="itemRevenue"),
+        ],
+        date_ranges=[DateRange(start_date="30daysAgo", end_date="today")],
+    )
+    response_product = ga4_client.run_report(request_product)
+    product_data = []
+
+    for row in response_product.rows:
+        product_data.append({
+            'name': row.dimension_values[0].value,
+            'purchased': int(float(row.metric_values[0].value)),
+            'revenue': float(row.metric_values[1].value),
+        })
+
+    print(f"  ✓ {len(product_data)} products found")
+
+except Exception as e:
+    print(f"  ✗ Product data error: {e}")
+    product_data = []
+
 # ===== OPEN GOOGLE SHEETS =====
 print("\n🔗 Opening Google Sheets...")
 sheet = gc.open_by_key(SPREADSHEET_ID)
@@ -218,6 +282,53 @@ ws_summary.append_row(['平均CPA', round(cpa_avg, 0), '¥'])
 ws_summary.append_row(['平均ROAS', round(roas_avg, 2), '倍'])
 
 print("  ✓ Summary sheet created")
+
+# ===== CREATE/UPDATE TRAFFIC SOURCE SHEET =====
+print("\n💾 Updating traffic source sheet...")
+
+sheet_name_traffic = '流入経路'
+try:
+    ws_traffic = sheet.worksheet(sheet_name_traffic)
+    ws_traffic.clear()
+except:
+    ws_traffic = sheet.add_worksheet(sheet_name_traffic, rows=1000, cols=8)
+
+ws_traffic.append_row(['日付', '流入経路', 'セッション数', 'PV数', 'CV数', '更新日時'])
+
+for item in sorted(traffic_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    ws_traffic.append_row([
+        date_obj.strftime('%m/%d'),
+        item['channel'],
+        item['sessions'],
+        item['pageviews'],
+        item['conversions'],
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+print(f"  ✓ {len(traffic_data)} rows written to 流入経路 sheet")
+
+# ===== CREATE/UPDATE PRODUCT SHEET =====
+print("\n💾 Updating product sheet...")
+
+sheet_name_product = '商品別'
+try:
+    ws_product = sheet.worksheet(sheet_name_product)
+    ws_product.clear()
+except:
+    ws_product = sheet.add_worksheet(sheet_name_product, rows=300, cols=6)
+
+ws_product.append_row(['商品名', '購入数', '売上(¥)', '更新日時'])
+
+for item in sorted(product_data, key=lambda x: -x['revenue']):
+    ws_product.append_row([
+        item['name'],
+        item['purchased'],
+        round(item['revenue'] * USD_TO_JPY, 0),
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+print(f"  ✓ {len(product_data)} rows written to 商品別 sheet")
 
 # ===== FINAL SUMMARY =====
 print(f"\n" + "="*70)

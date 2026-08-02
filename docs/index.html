@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OUCA ROI Dashboard - Live Data</title>
+  <title>OUCA 広告効果ダッシュボード</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%);
       padding: 20px;
       min-height: 100vh;
     }
     .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+    .header { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; padding: 30px; text-align: center; }
     .header h1 { font-size: 28px; margin-bottom: 5px; }
     .header p { font-size: 14px; opacity: 0.9; }
     .last-update { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 10px; }
@@ -23,18 +23,18 @@
     .control-group { display: flex; flex-direction: column; }
     .control-group label { font-size: 12px; font-weight: 600; color: #495057; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
     .control-group input, .control-group select { padding: 10px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 14px; transition: all 0.3s ease; }
-    .control-group input:focus, .control-group select:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+    .control-group input:focus, .control-group select:focus { outline: none; border-color: #2e7d32; box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15); }
     .buttons { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
     @media (max-width: 640px) { .buttons { grid-template-columns: 1fr; } }
     button { padding: 12px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
-    .btn-update { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-    .btn-update:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); }
+    .btn-update { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; }
+    .btn-update:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(46, 125, 50, 0.3); }
     .btn-reset { background: #e9ecef; color: #495057; }
     .btn-reset:hover { background: #dee2e6; }
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; padding: 20px; background: white; border-bottom: 1px solid #e9ecef; }
     @media (max-width: 1024px) { .summary { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 640px) { .summary { grid-template-columns: 1fr; } }
-    .kpi-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; }
+    .kpi-card { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; }
     .kpi-label { font-size: 12px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; }
     .kpi-value { font-size: 24px; font-weight: 700; }
     .status { padding: 15px 20px; background: #e8f5e9; color: #2e7d32; border-left: 4px solid #2e7d32; display: none; }
@@ -48,17 +48,17 @@
     td { padding: 12px; border-bottom: 1px solid #e9ecef; }
     tr:hover { background: #f8f9fa; }
     .sheet-tabs { display: flex; gap: 10px; padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; overflow-x: auto; }
-    .sheet-tab { padding: 8px 16px; background: white; border: 1px solid #dee2e6; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.3s ease; }
+    .sheet-tab { padding: 8px 16px; background: white; border: 1px solid #dee2e6; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.3s ease; white-space: nowrap; }
     .sheet-tab:hover { background: #e9ecef; }
-    .sheet-tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: #667eea; }
+    .sheet-tab.active { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; border-color: #2e7d32; }
     .sheet-content { display: none; }
     .sheet-content.active { display: block; }
-    .login-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .login-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
     .login-box { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 40px; max-width: 360px; width: 100%; text-align: center; }
     .login-box h2 { margin-bottom: 20px; color: #333; font-size: 20px; }
     .login-box input { width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
-    .login-box input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
-    .login-box button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .login-box input:focus { outline: none; border-color: #2e7d32; box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15); }
+    .login-box button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; }
     .login-error { color: #c62828; font-size: 13px; margin-top: 10px; display: none; }
     .login-error.show { display: block; }
     .app-hidden { display: none; }
@@ -67,7 +67,7 @@
 <body>
   <div class="login-overlay" id="loginOverlay">
     <div class="login-box">
-      <h2>🔒 OUCA ROI Dashboard</h2>
+      <h2>🔒 OUCA 広告効果ダッシュボード</h2>
       <input type="password" id="loginPassword" placeholder="パスワードを入力">
       <button onclick="checkLogin()">ログイン</button>
       <div class="login-error" id="loginError">パスワードが違います</div>
@@ -75,34 +75,36 @@
   </div>
   <div class="container app-hidden" id="app">
     <div class="header">
-      <h1>📊 OUCA ROI DASHBOARD</h1>
-      <p>Live Performance Analytics with Auto-Update (JPY)</p>
+      <h1>📊 OUCA 広告効果ダッシュボード</h1>
+      <p>自動更新される広告パフォーマンス分析（円）</p>
       <div class="last-update">
-        Last Updated: <span id="lastUpdate">Loading...</span>
+        最終更新: <span id="lastUpdate">読み込み中...</span>
         <br>
-        🔄 Auto-refresh every 5 minutes from Google Sheets
+        🔄 5分ごとにGoogleスプレッドシートから自動更新
       </div>
     </div>
 
     <div class="sheet-tabs">
-      <button class="sheet-tab active" onclick="switchSheet('dashboard')">📊 Dashboard</button>
-      <button class="sheet-tab" onclick="switchSheet('summary')">📈 Summary</button>
+      <button class="sheet-tab active" onclick="switchSheet('dashboard')">📊 広告効果</button>
+      <button class="sheet-tab" onclick="switchSheet('summary')">📈 サマリー</button>
+      <button class="sheet-tab" onclick="switchSheet('traffic')">🌐 流入・PV</button>
+      <button class="sheet-tab" onclick="switchSheet('product')">🛍️ 商品別</button>
     </div>
 
     <div id="dashboard" class="sheet-content active">
       <div class="controls">
         <div class="control-group">
-          <label>📅 Start Date</label>
+          <label>📅 開始日</label>
           <input type="date" id="startDate" value="2024-11-20">
         </div>
         <div class="control-group">
-          <label>📅 End Date</label>
+          <label>📅 終了日</label>
           <input type="date" id="endDate" value="2024-11-30">
         </div>
         <div class="control-group">
-          <label>📊 Platform</label>
+          <label>📊 媒体</label>
           <select id="platform">
-            <option value="ALL">ALL Platforms</option>
+            <option value="ALL">すべての媒体</option>
             <option value="Google">Google Ads</option>
             <option value="Meta">Meta Ads</option>
           </select>
@@ -110,28 +112,28 @@
       </div>
 
       <div class="buttons">
-        <button class="btn-update" onclick="loadDashboardData()">🔄 Load Live Data</button>
-        <button class="btn-reset" onclick="resetFilters()">↺ Reset</button>
+        <button class="btn-update" onclick="loadDashboardData()">🔄 最新データを取得</button>
+        <button class="btn-reset" onclick="resetFilters()">↺ リセット</button>
       </div>
 
       <div class="status" id="status"></div>
 
       <div class="summary">
         <div class="kpi-card">
-          <div class="kpi-label">Total Spend</div>
+          <div class="kpi-label">総広告費</div>
           <div class="kpi-value" id="totalSpend">¥0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Total CV</div>
+          <div class="kpi-label">総CV数</div>
           <div class="kpi-value" id="totalCV">0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Avg CPA</div>
+          <div class="kpi-label">平均CPA</div>
           <div class="kpi-value" id="avgCPA">¥0</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">ROAS</div>
-          <div class="kpi-value" id="roas">0x</div>
+          <div class="kpi-value" id="roas">0倍</div>
         </div>
       </div>
 
@@ -139,18 +141,18 @@
         <table>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Platform</th>
-              <th>Revenue (¥)</th>
-              <th>Spend (¥)</th>
-              <th>Clicks</th>
-              <th>CV</th>
-              <th>CPA (¥)</th>
+              <th>日付</th>
+              <th>媒体</th>
+              <th>売上(¥)</th>
+              <th>広告費(¥)</th>
+              <th>クリック数</th>
+              <th>CV数</th>
+              <th>CPA(¥)</th>
               <th>ROAS</th>
             </tr>
           </thead>
           <tbody id="dataTable">
-            <tr><td colspan="8" style="text-align:center;padding:40px;">Click "Load Live Data"</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -158,13 +160,70 @@
 
     <div id="summary" class="sheet-content">
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📈 30-Day Summary</h2>
+        <h2 style="margin-bottom: 15px;">📈 過去30日間のサマリー</h2>
         <table>
           <thead>
-            <tr><th>Metric</th><th>Value</th><th>Unit</th></tr>
+            <tr><th>指標</th><th>値</th><th>単位</th></tr>
           </thead>
           <tbody id="summaryTable">
-            <tr><td colspan="3" style="text-align:center;padding:40px;">Click "Load Live Data"</td></tr>
+            <tr><td colspan="3" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="traffic" class="sheet-content">
+      <div class="summary" style="border-bottom:none;">
+        <div class="kpi-card">
+          <div class="kpi-label">本日のPV</div>
+          <div class="kpi-value" id="todayPV">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">30日間 総セッション数</div>
+          <div class="kpi-value" id="totalSessions">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">30日間 総PV数</div>
+          <div class="kpi-value" id="totalPV">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">30日間 総CV数</div>
+          <div class="kpi-value" id="trafficTotalCV">0</div>
+        </div>
+      </div>
+      <p style="padding:0 20px;font-size:12px;color:#868e96;">※本日のPVは1日1回（朝9時）の自動更新時点の数値です。リアルタイムの数値ではありません。</p>
+      <div class="data-table">
+        <h2 style="margin-bottom: 15px;">🌐 流入経路別（過去30日間）</h2>
+        <table>
+          <thead>
+            <tr><th>流入経路</th><th>セッション数</th><th>PV数</th><th>CV数</th></tr>
+          </thead>
+          <tbody id="trafficTable">
+            <tr><td colspan="4" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="product" class="sheet-content">
+      <div class="summary" style="grid-template-columns: repeat(2, 1fr); border-bottom:none;">
+        <div class="kpi-card">
+          <div class="kpi-label">総購入数</div>
+          <div class="kpi-value" id="totalPurchased">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">総売上</div>
+          <div class="kpi-value" id="totalProductRevenue">¥0</div>
+        </div>
+      </div>
+      <div class="data-table">
+        <h2 style="margin-bottom: 15px;">🛍️ 商品別 購入実績（過去30日間）</h2>
+        <table>
+          <thead>
+            <tr><th>商品名</th><th>購入数</th><th>売上(¥)</th></tr>
+          </thead>
+          <tbody id="productTable">
+            <tr><td colspan="3" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -198,8 +257,8 @@
     }
 
     function startDashboard() {
-      loadDashboardData();
-      setInterval(loadDashboardData, 5 * 60 * 1000);
+      loadAllData();
+      setInterval(loadAllData, 5 * 60 * 1000);
     }
 
     const SHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM';
@@ -212,14 +271,36 @@
       event.target.classList.add('active');
     }
 
+    function sheetCsvUrl(sheetName) {
+      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+    }
+
     function parseCSV(csv) {
       const lines = csv.trim().split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
+      const parseLine = line => {
+        const result = [];
+        let cur = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') {
+            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+            else inQuotes = !inQuotes;
+          } else if (c === ',' && !inQuotes) {
+            result.push(cur); cur = '';
+          } else {
+            cur += c;
+          }
+        }
+        result.push(cur);
+        return result.map(v => v.trim());
+      };
+      const headers = parseLine(lines[0]);
       const data = [];
       for (let i = 1; i < lines.length; i++) {
+        if (!lines[i]) continue;
+        const cols = parseLine(lines[i]);
         const obj = {};
-        const cols = lines[i].split(',').map(v => v.trim());
-        for (let j = 0; j < headers.length; j++) obj[headers[j]] = cols[j];
+        headers.forEach((h, j) => obj[h] = cols[j]);
         data.push(obj);
       }
       return data;
@@ -234,31 +315,32 @@
       if (type !== 'loading') setTimeout(() => el.classList.remove('show'), 3000);
     }
 
-    async function loadDashboardData() {
-      showStatus('📡 Loading from Google Sheets...', 'loading');
+    async function loadAllData() {
+      showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-        const res = await fetch(url);
-        const csv = await res.text();
-        allData = parseCSV(csv);
-
-        const platform = document.getElementById('platform').value;
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-
-        const filtered = allData.filter(row => {
-          const match = platform === 'ALL' || row.Platform === platform;
-          return match;
-        });
-
-        displayData(filtered);
-        displaySummary(filtered);
+        await Promise.all([
+          loadDashboardData(),
+          loadTrafficData(),
+          loadProductData(),
+        ]);
         document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ja-JP');
-        showStatus('✓ Live data loaded!', 'success');
-      } catch(e) {
-        showStatus('✗ Error loading data', 'error');
+        showStatus('✓ データを取得しました', 'success');
+      } catch (e) {
+        showStatus('✗ データの取得に失敗しました', 'error');
         console.error(e);
       }
+    }
+
+    async function loadDashboardData() {
+      const res = await fetch(sheetCsvUrl('Live Data'));
+      const csv = await res.text();
+      allData = parseCSV(csv);
+
+      const platform = document.getElementById('platform').value;
+      const filtered = allData.filter(row => platform === 'ALL' || row.Platform === platform);
+
+      displayData(filtered);
+      displaySummary(filtered);
     }
 
     function displayData(data) {
@@ -272,7 +354,7 @@
         totalSpend += spend;
         totalCV += cv;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(parseFloat(row['Revenue (¥)']) || 0)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}x</td>`;
+        tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(parseFloat(row['Revenue (¥)']) || 0)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}倍</td>`;
         tbody.appendChild(tr);
       });
 
@@ -281,7 +363,7 @@
       document.getElementById('totalSpend').textContent = '¥' + formatNumber(totalSpend);
       document.getElementById('totalCV').textContent = formatNumber(totalCV);
       document.getElementById('avgCPA').textContent = '¥' + formatNumber(avgCPA);
-      document.getElementById('roas').textContent = roas.toFixed(2) + 'x';
+      document.getElementById('roas').textContent = roas.toFixed(2) + '倍';
     }
 
     function displaySummary(data) {
@@ -311,13 +393,84 @@
       });
     }
 
+    async function loadTrafficData() {
+      const res = await fetch(sheetCsvUrl('流入経路'));
+      const csv = await res.text();
+      const data = parseCSV(csv);
+      if (data.length === 0) return;
+
+      const byChannel = {};
+      let totalSessions = 0, totalPV = 0, totalCV = 0;
+      let latestDate = null, todayPV = 0;
+
+      data.forEach(row => {
+        const channel = row['流入経路'] || '不明';
+        const sessions = parseFloat(row['セッション数']) || 0;
+        const pv = parseFloat(row['PV数']) || 0;
+        const cv = parseFloat(row['CV数']) || 0;
+
+        if (!byChannel[channel]) byChannel[channel] = { sessions: 0, pv: 0, cv: 0 };
+        byChannel[channel].sessions += sessions;
+        byChannel[channel].pv += pv;
+        byChannel[channel].cv += cv;
+
+        totalSessions += sessions;
+        totalPV += pv;
+        totalCV += cv;
+
+        if (row['日付'] && row['日付'] === latestDate) {
+          todayPV += pv;
+        } else if (!latestDate || row['日付'] > latestDate) {
+          latestDate = row['日付'];
+          todayPV = pv;
+        }
+      });
+
+      document.getElementById('todayPV').textContent = formatNumber(todayPV);
+      document.getElementById('totalSessions').textContent = formatNumber(totalSessions);
+      document.getElementById('totalPV').textContent = formatNumber(totalPV);
+      document.getElementById('trafficTotalCV').textContent = formatNumber(totalCV);
+
+      const tbody = document.getElementById('trafficTable');
+      tbody.innerHTML = '';
+      Object.keys(byChannel).sort((a, b) => byChannel[b].sessions - byChannel[a].sessions).forEach(channel => {
+        const c = byChannel[channel];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${channel}</td><td>${formatNumber(c.sessions)}</td><td>${formatNumber(c.pv)}</td><td>${formatNumber(c.cv)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadProductData() {
+      const res = await fetch(sheetCsvUrl('商品別'));
+      const csv = await res.text();
+      const data = parseCSV(csv);
+      if (data.length === 0) return;
+
+      let totalPurchased = 0, totalRevenue = 0;
+      const tbody = document.getElementById('productTable');
+      tbody.innerHTML = '';
+
+      data.forEach(row => {
+        const purchased = parseFloat(row['購入数']) || 0;
+        const revenue = parseFloat(row['売上(¥)']) || 0;
+        totalPurchased += purchased;
+        totalRevenue += revenue;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row['商品名'] || ''}</td><td>${formatNumber(purchased)}</td><td>¥${formatNumber(revenue)}</td>`;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('totalPurchased').textContent = formatNumber(totalPurchased);
+      document.getElementById('totalProductRevenue').textContent = '¥' + formatNumber(totalRevenue);
+    }
+
     function resetFilters() {
       document.getElementById('startDate').value = '2024-11-20';
       document.getElementById('endDate').value = '2024-11-30';
       document.getElementById('platform').value = 'ALL';
-      loadDashboardData();
+      loadAllData();
     }
-
   </script>
 </body>
 </html>
