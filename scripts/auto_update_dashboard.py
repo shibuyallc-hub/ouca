@@ -191,7 +191,7 @@ headers = [
     'CTR (%)', 'CVR (%)', 'CPA (¥)', 'ROAS',
     'Last Updated'
 ]
-ws_data.append_row(headers)
+rows_data = [headers]
 
 # Daily data
 for date_str in sorted(daily_by_date.keys()):
@@ -228,7 +228,7 @@ for date_str in sorted(daily_by_date.keys()):
         date_obj = datetime.strptime(date_str, '%Y%m%d')
         formatted_date = date_obj.strftime('%m/%d')
 
-        ws_data.append_row([
+        rows_data.append([
             formatted_date,
             '日別',
             platform,
@@ -243,6 +243,7 @@ for date_str in sorted(daily_by_date.keys()):
             datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ])
 
+ws_data.append_rows(rows_data)
 print(f"  ✓ {len(daily_by_date) * 3} rows written to sheet")
 
 # ===== CREATE/UPDATE SUMMARY SHEET =====
@@ -269,17 +270,19 @@ cvr_avg = (total_cv / max(1, total_clicks)) * 100 if total_clicks > 0 else 0
 cpa_avg = total_spend_jpy / total_cv if total_cv > 0 else 0
 roas_avg = total_revenue_jpy / total_spend_jpy if total_spend_jpy > 0 else 0
 
-ws_summary.append_row(['【30日間サマリー】', '', ''])
-ws_summary.append_row(['', '', ''])
-ws_summary.append_row(['Metric', 'Value', 'Currency'])
-ws_summary.append_row(['総売上', round(total_revenue_jpy, 0), '¥'])
-ws_summary.append_row(['総広告費', round(total_spend_jpy, 0), '¥'])
-ws_summary.append_row(['総クリック数', int(total_clicks), '回'])
-ws_summary.append_row(['総CV数', int(total_cv), '件'])
-ws_summary.append_row(['平均CTR', round(ctr_avg, 2), '%'])
-ws_summary.append_row(['平均CVR', round(cvr_avg, 2), '%'])
-ws_summary.append_row(['平均CPA', round(cpa_avg, 0), '¥'])
-ws_summary.append_row(['平均ROAS', round(roas_avg, 2), '倍'])
+ws_summary.append_rows([
+    ['【30日間サマリー】', '', ''],
+    ['', '', ''],
+    ['Metric', 'Value', 'Currency'],
+    ['総売上', round(total_revenue_jpy, 0), '¥'],
+    ['総広告費', round(total_spend_jpy, 0), '¥'],
+    ['総クリック数', int(total_clicks), '回'],
+    ['総CV数', int(total_cv), '件'],
+    ['平均CTR', round(ctr_avg, 2), '%'],
+    ['平均CVR', round(cvr_avg, 2), '%'],
+    ['平均CPA', round(cpa_avg, 0), '¥'],
+    ['平均ROAS', round(roas_avg, 2), '倍'],
+])
 
 print("  ✓ Summary sheet created")
 
@@ -293,11 +296,11 @@ try:
 except:
     ws_traffic = sheet.add_worksheet(sheet_name_traffic, rows=1000, cols=8)
 
-ws_traffic.append_row(['日付', '流入経路', 'セッション数', 'PV数', 'CV数', '更新日時'])
+rows_traffic = [['日付', '流入経路', 'セッション数', 'PV数', 'CV数', '更新日時']]
 
 for item in sorted(traffic_data, key=lambda x: x['date']):
     date_obj = datetime.strptime(item['date'], '%Y%m%d')
-    ws_traffic.append_row([
+    rows_traffic.append([
         date_obj.strftime('%m/%d'),
         item['channel'],
         item['sessions'],
@@ -306,6 +309,7 @@ for item in sorted(traffic_data, key=lambda x: x['date']):
         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ])
 
+ws_traffic.append_rows(rows_traffic)
 print(f"  ✓ {len(traffic_data)} rows written to 流入経路 sheet")
 
 # ===== CREATE/UPDATE PRODUCT SHEET =====
@@ -318,16 +322,17 @@ try:
 except:
     ws_product = sheet.add_worksheet(sheet_name_product, rows=300, cols=6)
 
-ws_product.append_row(['商品名', '購入数', '売上(¥)', '更新日時'])
+rows_product = [['商品名', '購入数', '売上(¥)', '更新日時']]
 
 for item in sorted(product_data, key=lambda x: -x['revenue']):
-    ws_product.append_row([
+    rows_product.append([
         item['name'],
         item['purchased'],
         round(item['revenue'] * USD_TO_JPY, 0),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ])
 
+ws_product.append_rows(rows_product)
 print(f"  ✓ {len(product_data)} rows written to 商品別 sheet")
 
 # ===== FINAL SUMMARY =====
