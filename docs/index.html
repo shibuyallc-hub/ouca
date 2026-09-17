@@ -45,7 +45,8 @@
     th { background: #f8f9fa; padding: 12px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; }
     td { padding: 12px; border-bottom: 1px solid #e9ecef; }
     tr:hover { background: #f8f9fa; }
-    .sheet-tabs { display: flex; gap: 10px; padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; overflow-x: auto; }
+    .tabs-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
+    .sheet-tabs { display: flex; gap: 10px; overflow-x: auto; }
     .sheet-tab { padding: 8px 16px; background: white; border: 1px solid #dee2e6; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.3s ease; white-space: nowrap; }
     .sheet-tab:hover { background: #e9ecef; }
     .sheet-tab.active { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; border-color: #2e7d32; }
@@ -65,14 +66,15 @@
     .daterange { position: relative; }
     .daterange-btn { background: white; border: 1px solid #dee2e6; padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #333; cursor: pointer; white-space: nowrap; }
     .daterange-btn:hover { border-color: #2e7d32; }
-    .daterange-panel { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; background: white; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,0.15); padding: 12px; width: 260px; }
+    .daterange-panel { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; background: white; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,0.15); padding: 12px; width: 300px; }
     .daterange-presets { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; margin-bottom: 10px; }
     .daterange-preset-btn { text-align: left; background: none; border: none; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 400; color: #333; cursor: pointer; }
     .daterange-preset-btn:hover { background: #f1f3f5; }
     .daterange-preset-btn.active { background: #e8f5e9; color: #2e7d32; font-weight: 600; }
-    .daterange-custom { display: flex; align-items: center; gap: 6px; border-top: 1px solid #e9ecef; padding-top: 10px; }
-    .daterange-custom input { flex: 1; min-width: 0; padding: 6px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 12px; }
-    .daterange-apply { padding: 6px 10px; font-size: 12px; }
+    .daterange-custom { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #e9ecef; padding-top: 10px; }
+    .daterange-inputs { display: flex; align-items: center; gap: 6px; }
+    .daterange-inputs input { flex: 1; min-width: 0; padding: 8px 6px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 12px; }
+    .daterange-apply { width: 100%; padding: 8px; font-size: 13px; }
 
     /* ---- Charts ---- */
     .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; border-bottom: 1px solid #e9ecef; }
@@ -105,11 +107,38 @@
       </div>
     </div>
 
-    <div class="sheet-tabs">
-      <button class="sheet-tab active" onclick="switchSheet('dashboard')">📊 広告効果</button>
-      <button class="sheet-tab" onclick="switchSheet('summary')">📈 サマリー</button>
-      <button class="sheet-tab" onclick="switchSheet('traffic')">🌐 流入・PV</button>
-      <button class="sheet-tab" onclick="switchSheet('product')">🛍️ 商品別</button>
+    <div class="tabs-bar">
+      <div class="sheet-tabs">
+        <button class="sheet-tab active" onclick="switchSheet('dashboard')">📊 広告効果</button>
+        <button class="sheet-tab" onclick="switchSheet('summary')">📈 サマリー</button>
+        <button class="sheet-tab" onclick="switchSheet('traffic')">🌐 流入・PV</button>
+        <button class="sheet-tab" onclick="switchSheet('product')">🛍️ 商品別</button>
+      </div>
+      <div class="daterange" id="globalRange">
+        <button type="button" class="daterange-btn">📅 <span class="daterange-label">過去30日間</span> ▾</button>
+        <div class="daterange-panel">
+          <div class="daterange-presets">
+            <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
+            <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
+            <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
+            <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
+            <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
+            <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
+            <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
+            <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
+            <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
+            <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
+          </div>
+          <div class="daterange-custom">
+            <div class="daterange-inputs">
+              <input type="date" class="daterange-start">
+              <span>〜</span>
+              <input type="date" class="daterange-end">
+            </div>
+            <button type="button" class="btn-update daterange-apply">適用</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="buttons">
@@ -121,32 +150,6 @@
 
     <div id="dashboard" class="sheet-content active">
       <div class="controls">
-        <div class="control-group">
-          <label>📅 期間</label>
-          <div class="daterange" id="adsRange">
-            <button type="button" class="daterange-btn"><span class="daterange-label">過去30日間</span> ▾</button>
-            <div class="daterange-panel">
-              <div class="daterange-presets">
-                <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
-                <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
-                <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
-                <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
-                <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
-                <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
-                <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
-              </div>
-              <div class="daterange-custom">
-                <input type="date" class="daterange-start">
-                <span>〜</span>
-                <input type="date" class="daterange-end">
-                <button type="button" class="btn-update daterange-apply">適用</button>
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="control-group">
           <label>📊 媒体</label>
           <select id="platform">
@@ -218,7 +221,7 @@
 
     <div id="summary" class="sheet-content">
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📈 サマリー（広告効果タブで選択中の期間）</h2>
+        <h2 style="margin-bottom: 15px;">📈 広告サマリー</h2>
         <table>
           <thead>
             <tr><th>指標</th><th>値</th><th>単位</th></tr>
@@ -231,35 +234,6 @@
     </div>
 
     <div id="traffic" class="sheet-content">
-      <div class="controls">
-        <div class="control-group">
-          <label>📅 期間</label>
-          <div class="daterange" id="trafficRange">
-            <button type="button" class="daterange-btn"><span class="daterange-label">過去30日間</span> ▾</button>
-            <div class="daterange-panel">
-              <div class="daterange-presets">
-                <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
-                <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
-                <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
-                <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
-                <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
-                <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
-                <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
-              </div>
-              <div class="daterange-custom">
-                <input type="date" class="daterange-start">
-                <span>〜</span>
-                <input type="date" class="daterange-end">
-                <button type="button" class="btn-update daterange-apply">適用</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="summary" style="border-bottom:none;">
         <div class="kpi-card">
           <div class="kpi-label">本日のPV</div>
@@ -314,32 +288,6 @@
 
     <div id="product" class="sheet-content">
       <div class="controls">
-        <div class="control-group">
-          <label>📅 期間</label>
-          <div class="daterange" id="productRange">
-            <button type="button" class="daterange-btn"><span class="daterange-label">過去30日間</span> ▾</button>
-            <div class="daterange-panel">
-              <div class="daterange-presets">
-                <button type="button" class="daterange-preset-btn" data-preset="today">今日</button>
-                <button type="button" class="daterange-preset-btn" data-preset="yesterday">昨日</button>
-                <button type="button" class="daterange-preset-btn" data-preset="thisWeek">今週（日〜今日）</button>
-                <button type="button" class="daterange-preset-btn" data-preset="last7">過去7日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="lastWeek">先週（日〜土）</button>
-                <button type="button" class="daterange-preset-btn" data-preset="last14">過去14日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="thisMonth">今月</button>
-                <button type="button" class="daterange-preset-btn active" data-preset="last30">過去30日間</button>
-                <button type="button" class="daterange-preset-btn" data-preset="lastMonth">先月</button>
-                <button type="button" class="daterange-preset-btn" data-preset="allTime">全期間</button>
-              </div>
-              <div class="daterange-custom">
-                <input type="date" class="daterange-start">
-                <span>〜</span>
-                <input type="date" class="daterange-end">
-                <button type="button" class="btn-update daterange-apply">適用</button>
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="control-group">
           <label>🛍️ 流入区分</label>
           <select id="productChannel">
@@ -443,7 +391,8 @@
       lastMonth: '先月', allTime: '全期間', custom: 'カスタム'
     };
 
-    const dateRangeStates = {};
+    let currentRange = null;
+    let globalRangeController = null;
 
     function checkLogin() {
       const input = document.getElementById('loginPassword');
@@ -534,14 +483,12 @@
     }
 
     function initDateRangePickers() {
-      ['adsRange', 'trafficRange', 'productRange'].forEach(id => {
-        const rootEl = document.getElementById(id);
-        createDateRangePicker(rootEl, 'last30', (start, end) => {
-          dateRangeStates[id] = { start, end };
-          if (id === 'adsRange') renderAdsTab();
-          if (id === 'trafficRange') renderTrafficTab();
-          if (id === 'productRange') renderProductTab();
-        });
+      const rootEl = document.getElementById('globalRange');
+      globalRangeController = createDateRangePicker(rootEl, 'last30', (start, end) => {
+        currentRange = { start, end };
+        renderAdsTab();
+        renderTrafficTab();
+        renderProductTab();
       });
     }
 
@@ -588,6 +535,8 @@
       });
 
       applyPreset(defaultPresetKey);
+
+      return { applyPreset };
     }
 
     function inRange(dateStr, start, end) {
@@ -704,7 +653,7 @@
 
     // ===================== ADS TAB =====================
     function renderAdsTab() {
-      const range = dateRangeStates['adsRange'];
+      const range = currentRange;
       if (!range) return;
       const platform = document.getElementById('platform').value;
 
@@ -793,7 +742,7 @@
 
     // ===================== TRAFFIC TAB =====================
     function renderTrafficTab() {
-      const range = dateRangeStates['trafficRange'];
+      const range = currentRange;
       if (!range || allTrafficData.length === 0) return;
 
       const filtered = allTrafficData.filter(row => inRange(row['日付'], range.start, range.end));
@@ -862,7 +811,7 @@
 
     // ===================== PRODUCT TAB =====================
     function renderProductTab() {
-      const range = dateRangeStates['productRange'];
+      const range = currentRange;
       if (!range) return;
       const channelFilter = document.getElementById('productChannel').value;
 
@@ -920,10 +869,8 @@
 
     function resetFilters() {
       document.getElementById('platform').value = 'ALL';
-      initDateRangePickers();
-      renderAdsTab();
-      renderTrafficTab();
-      renderProductTab();
+      document.getElementById('productChannel').value = 'ALL';
+      if (globalRangeController) globalRangeController.applyPreset('last30');
     }
   </script>
 </body>
