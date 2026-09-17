@@ -241,6 +241,19 @@
     </div>
 
     <div id="traffic" class="sheet-content">
+      <div class="controls">
+        <div class="control-group">
+          <label>🌐 流入区分</label>
+          <select id="trafficChannelFilter">
+            <option value="ALL">すべて</option>
+            <option value="ADS">広告のみ（Google+Meta）</option>
+            <option value="Google">Google広告</option>
+            <option value="Meta">Meta広告</option>
+            <option value="OTHER">広告以外（自然流入など）</option>
+          </select>
+        </div>
+      </div>
+
       <div class="summary" style="border-bottom:none;">
         <div class="kpi-card">
           <div class="kpi-label">本日のPV</div>
@@ -310,7 +323,8 @@
       </div>
 
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">📄 ページ別 閲覧状況（選択期間・PVの多い順）</h2>
+        <h2 style="margin-bottom: 5px;">📄 ページ別 閲覧状況（選択期間・PVの多い順）</h2>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※このテーブルは流入区分の絞り込みに関わらず、全流入経路の合計です。</p>
         <table>
           <thead>
             <tr><th>ページ</th><th>タイトル</th><th>PV数</th><th>平均滞在時間</th><th>直帰率</th></tr>
@@ -788,11 +802,27 @@
       return `${m}分${rem}秒`;
     }
 
+    function trafficChannelBucket(channel) {
+      if (channel === 'Paid Search') return 'Google';
+      if (channel === 'Paid Social') return 'Meta';
+      return 'OTHER';
+    }
+
+    function passesChannelFilter(channel, chFilter) {
+      if (chFilter === 'ALL') return true;
+      const bucket = trafficChannelBucket(channel);
+      if (chFilter === 'ADS') return bucket !== 'OTHER';
+      return bucket === chFilter;
+    }
+
     function renderTrafficTab() {
       const range = currentRange;
       if (!range || allTrafficData.length === 0) return;
+      const chFilter = document.getElementById('trafficChannelFilter').value;
 
-      const filtered = allTrafficData.filter(row => inRange(row['日付'], range.start, range.end));
+      const filtered = allTrafficData.filter(row =>
+        inRange(row['日付'], range.start, range.end) && passesChannelFilter(row['流入経路'], chFilter)
+      );
 
       const byChannel = {};
       let totalSessions = 0, totalPV = 0, totalCV = 0;
@@ -800,6 +830,7 @@
       let latestDate = null, todayPV = 0;
 
       allTrafficData.forEach(row => {
+        if (!passesChannelFilter(row['流入経路'], chFilter)) return;
         const pv = parseFloat(row['PV数']) || 0;
         if (!row['日付']) return;
         if (!latestDate || row['日付'] > latestDate) {
@@ -1023,10 +1054,12 @@
 
     document.getElementById('platform').addEventListener('change', renderAdsTab);
     document.getElementById('productChannel').addEventListener('change', renderProductTab);
+    document.getElementById('trafficChannelFilter').addEventListener('change', renderTrafficTab);
 
     function resetFilters() {
       document.getElementById('platform').value = 'ALL';
       document.getElementById('productChannel').value = 'ALL';
+      document.getElementById('trafficChannelFilter').value = 'ALL';
       if (globalRangeController) globalRangeController.applyPreset('last30');
     }
   </script>
