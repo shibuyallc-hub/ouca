@@ -76,6 +76,13 @@
     .daterange-inputs input { flex: 1; min-width: 0; padding: 8px 6px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 12px; }
     .daterange-apply { width: 100%; padding: 8px; font-size: 13px; }
 
+    /* ---- Insight box ---- */
+    .insight-box { margin: 0 20px 20px; padding: 16px 20px; background: #e8f5e9; border-left: 4px solid #2e7d32; border-radius: 8px; }
+    .insight-box h3 { font-size: 14px; color: #2e7d32; margin-bottom: 8px; }
+    .insight-box ul { margin: 0; padding-left: 20px; }
+    .insight-box li { font-size: 13px; color: #33691e; line-height: 1.8; }
+    .insight-box .no-data { color: #868e96; list-style: none; padding-left: 0; }
+
     /* ---- Charts ---- */
     .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; border-bottom: 1px solid #e9ecef; }
     @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
@@ -251,8 +258,25 @@
           <div class="kpi-label">選択期間 総CV数</div>
           <div class="kpi-value" id="trafficTotalCV">0</div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-label">平均滞在時間</div>
+          <div class="kpi-value" id="avgDuration">0秒</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">直帰率</div>
+          <div class="kpi-value" id="bounceRate">0%</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">1セッションあたりPV数</div>
+          <div class="kpi-value" id="pagesPerSession">0</div>
+        </div>
       </div>
       <p style="padding:0 20px;font-size:12px;color:#868e96;">※本日のPVは1日1回（朝9時）の自動更新時点の数値です。リアルタイムの数値ではありません。</p>
+
+      <div class="insight-box" id="trafficInsights">
+        <h3>📝 このデータから読み解けること</h3>
+        <ul id="trafficInsightsList"></ul>
+      </div>
 
       <div class="charts-row">
         <div class="chart-card">
@@ -277,10 +301,22 @@
         <h2 style="margin-bottom: 15px;">🌐 流入経路別（選択期間）</h2>
         <table>
           <thead>
-            <tr><th>流入経路</th><th>セッション数</th><th>PV数</th><th>CV数</th></tr>
+            <tr><th>流入経路</th><th>セッション数</th><th>PV数</th><th>CV数</th><th>平均滞在時間</th><th>直帰率</th></tr>
           </thead>
           <tbody id="trafficTable">
-            <tr><td colspan="4" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+            <tr><td colspan="6" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 15px;">📄 ページ別 閲覧状況（選択期間・PVの多い順）</h2>
+        <table>
+          <thead>
+            <tr><th>ページ</th><th>タイトル</th><th>PV数</th><th>平均滞在時間</th><th>直帰率</th></tr>
+          </thead>
+          <tbody id="pageTable">
+            <tr><td colspan="5" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -343,6 +379,7 @@
     let allAdsData = [];
     let allTrafficData = [];
     let allProductData = [];
+    let allPageData = [];
 
     // NOTE: these must stay declared before checkLogin()/the auto-login
     // block below, since a returning visitor with a valid session runs
@@ -630,14 +667,16 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, pageCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
+          fetch(sheetCsvUrl('ページ別行動')).then(r => r.text()),
         ]);
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
         allProductData = parseCSV(productCsv);
+        allPageData = parseCSV(pageCsv);
 
         renderAdsTab();
         renderTrafficTab();
@@ -741,6 +780,14 @@
     }
 
     // ===================== TRAFFIC TAB =====================
+    function formatDuration(seconds) {
+      const s = Math.round(seconds || 0);
+      if (s < 60) return `${s}秒`;
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      return `${m}分${rem}秒`;
+    }
+
     function renderTrafficTab() {
       const range = currentRange;
       if (!range || allTrafficData.length === 0) return;
@@ -749,6 +796,7 @@
 
       const byChannel = {};
       let totalSessions = 0, totalPV = 0, totalCV = 0;
+      let durationWeighted = 0, bounceWeighted = 0;
       let latestDate = null, todayPV = 0;
 
       allTrafficData.forEach(row => {
@@ -767,33 +815,48 @@
         const sessions = parseFloat(row['セッション数']) || 0;
         const pv = parseFloat(row['PV数']) || 0;
         const cv = parseFloat(row['CV数']) || 0;
+        const avgDuration = parseFloat(row['平均滞在時間(秒)']) || 0;
+        const bounceRate = parseFloat(row['直帰率(%)']) || 0;
 
-        if (!byChannel[channel]) byChannel[channel] = { sessions: 0, pv: 0, cv: 0 };
+        if (!byChannel[channel]) byChannel[channel] = { sessions: 0, pv: 0, cv: 0, durationWeighted: 0, bounceWeighted: 0 };
         byChannel[channel].sessions += sessions;
         byChannel[channel].pv += pv;
         byChannel[channel].cv += cv;
+        byChannel[channel].durationWeighted += avgDuration * sessions;
+        byChannel[channel].bounceWeighted += bounceRate * sessions;
 
         totalSessions += sessions;
         totalPV += pv;
         totalCV += cv;
+        durationWeighted += avgDuration * sessions;
+        bounceWeighted += bounceRate * sessions;
       });
+
+      const avgDuration = totalSessions > 0 ? durationWeighted / totalSessions : 0;
+      const bounceRate = totalSessions > 0 ? bounceWeighted / totalSessions : 0;
+      const pagesPerSession = totalSessions > 0 ? totalPV / totalSessions : 0;
 
       document.getElementById('todayPV').textContent = formatNumber(todayPV);
       document.getElementById('totalSessions').textContent = formatNumber(totalSessions);
       document.getElementById('totalPV').textContent = formatNumber(totalPV);
       document.getElementById('trafficTotalCV').textContent = formatNumber(totalCV);
+      document.getElementById('avgDuration').textContent = formatDuration(avgDuration);
+      document.getElementById('bounceRate').textContent = bounceRate.toFixed(1) + '%';
+      document.getElementById('pagesPerSession').textContent = pagesPerSession.toFixed(2);
 
       const tbody = document.getElementById('trafficTable');
       tbody.innerHTML = '';
       const channels = Object.keys(byChannel).sort((a, b) => byChannel[b].sessions - byChannel[a].sessions);
       channels.forEach(channel => {
         const c = byChannel[channel];
+        const cDuration = c.sessions > 0 ? c.durationWeighted / c.sessions : 0;
+        const cBounce = c.sessions > 0 ? c.bounceWeighted / c.sessions : 0;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${channel}</td><td>${formatNumber(c.sessions)}</td><td>${formatNumber(c.pv)}</td><td>${formatNumber(c.cv)}</td>`;
+        tr.innerHTML = `<td>${channel}</td><td>${formatNumber(c.sessions)}</td><td>${formatNumber(c.pv)}</td><td>${formatNumber(c.cv)}</td><td>${formatDuration(cDuration)}</td><td>${cBounce.toFixed(1)}%</td>`;
         tbody.appendChild(tr);
       });
       if (channels.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
       }
 
       const weekly = groupByPeriod(filtered, '日付', ['セッション数', 'PV数'], weekKey, 12);
@@ -807,6 +870,100 @@
         { name: 'セッション数', color: '#1565c0', values: monthly.map(m => m['セッション数']) },
         { name: 'PV数', color: '#2e7d32', values: monthly.map(m => m['PV数']) },
       ]);
+
+      // ---- Page-level behavior table ----
+      const filteredPages = allPageData.filter(row => inRange(row['日付'], range.start, range.end));
+      const byPage = {};
+      filteredPages.forEach(row => {
+        const path = row['ページ'] || '不明';
+        const pv = parseFloat(row['PV数']) || 0;
+        const dur = parseFloat(row['平均滞在時間(秒)']) || 0;
+        const bounce = parseFloat(row['直帰率(%)']) || 0;
+        if (!byPage[path]) byPage[path] = { path, title: row['タイトル'] || '', pv: 0, durationWeighted: 0, bounceWeighted: 0 };
+        byPage[path].pv += pv;
+        byPage[path].durationWeighted += dur * pv;
+        byPage[path].bounceWeighted += bounce * pv;
+        if (row['タイトル']) byPage[path].title = row['タイトル'];
+      });
+      const pageRows = Object.values(byPage)
+        .map(p => ({
+          ...p,
+          avgDuration: p.pv > 0 ? p.durationWeighted / p.pv : 0,
+          bounceRate: p.pv > 0 ? p.bounceWeighted / p.pv : 0,
+        }))
+        .sort((a, b) => b.pv - a.pv)
+        .slice(0, 15);
+
+      const pageTbody = document.getElementById('pageTable');
+      pageTbody.innerHTML = '';
+      pageRows.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${p.path}</td><td>${p.title}</td><td>${formatNumber(p.pv)}</td><td>${formatDuration(p.avgDuration)}</td><td>${p.bounceRate.toFixed(1)}%</td>`;
+        pageTbody.appendChild(tr);
+      });
+      if (pageRows.length === 0) {
+        pageTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+      }
+
+      // ---- Insights ----
+      renderTrafficInsights({ totalSessions, totalPV, totalCV, avgDuration, bounceRate, pagesPerSession, channels, byChannel, pageRows });
+    }
+
+    function renderTrafficInsights(stats) {
+      const list = document.getElementById('trafficInsightsList');
+      list.innerHTML = '';
+
+      if (stats.totalSessions === 0) {
+        list.innerHTML = '<li class="no-data">選択期間にデータがありません。</li>';
+        return;
+      }
+
+      const insights = [];
+
+      // Top channel
+      if (stats.channels.length > 0) {
+        const top = stats.channels[0];
+        const c = stats.byChannel[top];
+        const share = stats.totalSessions > 0 ? (c.sessions / stats.totalSessions) * 100 : 0;
+        insights.push(`最も多い流入経路は「${top}」で、全体の${share.toFixed(0)}%（${formatNumber(c.sessions)}セッション）を占めています。`);
+      }
+
+      // Bounce rate
+      if (stats.bounceRate >= 70) {
+        insights.push(`直帰率が${stats.bounceRate.toFixed(0)}%と高く、1ページだけ見て離脱するユーザーが多い状態です。ランディングページや最初の訴求内容の見直しの余地があります。`);
+      } else if (stats.bounceRate <= 40) {
+        insights.push(`直帰率は${stats.bounceRate.toFixed(0)}%と低めで、サイト内を回遊しているユーザーが多い傾向です。`);
+      } else {
+        insights.push(`直帰率は${stats.bounceRate.toFixed(0)}%で、平均的な水準です。`);
+      }
+
+      // Engagement time
+      if (stats.avgDuration < 30) {
+        insights.push(`平均滞在時間は${formatDuration(stats.avgDuration)}と短く、コンテンツがしっかり読まれていない可能性があります。`);
+      } else if (stats.avgDuration >= 120) {
+        insights.push(`平均滞在時間は${formatDuration(stats.avgDuration)}と長く、コンテンツがじっくり読まれています。`);
+      } else {
+        insights.push(`平均滞在時間は${formatDuration(stats.avgDuration)}です。`);
+      }
+
+      // Pages per session
+      if (stats.pagesPerSession < 1.3) {
+        insights.push(`1セッションあたりの閲覧ページ数は${stats.pagesPerSession.toFixed(2)}ページと少なく、他ページへの回遊がほとんど起きていません。`);
+      } else {
+        insights.push(`1セッションあたり${stats.pagesPerSession.toFixed(2)}ページ閲覧されており、複数ページを見て回るユーザーが一定数います。`);
+      }
+
+      // Top page
+      if (stats.pageRows.length > 0) {
+        const top = stats.pageRows[0];
+        insights.push(`最もよく見られているページは「${top.title || top.path}」（PV数${formatNumber(top.pv)}）です。`);
+      }
+
+      insights.forEach(text => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+      });
     }
 
     // ===================== PRODUCT TAB =====================

@@ -235,6 +235,8 @@ try:
         metrics=[
             Metric(name="sessions"),
             Metric(name="screenPageViews"),
+            Metric(name="averageSessionDuration"),
+            Metric(name="bounceRate"),
         ],
         date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
@@ -248,6 +250,8 @@ try:
             'channel': row.dimension_values[1].value,
             'sessions': int(float(row.metric_values[0].value)),
             'pageviews': int(float(row.metric_values[1].value)),
+            'avg_duration': float(row.metric_values[2].value),
+            'bounce_rate': float(row.metric_values[3].value) * 100,
             'conversions': 0,
         }
 
@@ -275,6 +279,8 @@ try:
                 'channel': row.dimension_values[1].value,
                 'sessions': 0,
                 'pageviews': 0,
+                'avg_duration': 0,
+                'bounce_rate': 0,
                 'conversions': cv,
             }
 
@@ -284,6 +290,43 @@ try:
 except Exception as e:
     print(f"  ✗ Traffic source error: {e}")
     traffic_data = []
+
+# ===== FETCH PAGE-LEVEL BEHAVIOR DATA =====
+print("\n📄 Fetching page-level behavior data...")
+
+try:
+    request_pages = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="pagePath"),
+            Dimension(name="pageTitle"),
+        ],
+        metrics=[
+            Metric(name="screenPageViews"),
+            Metric(name="averageSessionDuration"),
+            Metric(name="bounceRate"),
+        ],
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_pages = ga4_client.run_report(request_pages)
+    page_data = []
+
+    for row in response_pages.rows:
+        page_data.append({
+            'date': row.dimension_values[0].value,
+            'path': row.dimension_values[1].value,
+            'title': row.dimension_values[2].value,
+            'pageviews': int(float(row.metric_values[0].value)),
+            'avg_duration': float(row.metric_values[1].value),
+            'bounce_rate': float(row.metric_values[2].value) * 100,
+        })
+
+    print(f"  ✓ {len(page_data)} page/date records found")
+
+except Exception as e:
+    print(f"  ✗ Page-level behavior error: {e}")
+    page_data = []
 
 # ===== FETCH PRODUCT-LEVEL PURCHASE DATA =====
 print("\n🛍️ Fetching product-level purchase data...")
@@ -454,7 +497,7 @@ try:
 except:
     ws_traffic = sheet.add_worksheet(sheet_name_traffic, rows=6000, cols=8)
 
-rows_traffic = [['日付', '流入経路', 'セッション数', 'PV数', 'CV数', '更新日時']]
+rows_traffic = [['日付', '流入経路', 'セッション数', 'PV数', 'CV数', '平均滞在時間(秒)', '直帰率(%)', '更新日時']]
 
 for item in sorted(traffic_data, key=lambda x: x['date']):
     date_obj = datetime.strptime(item['date'], '%Y%m%d')
@@ -464,11 +507,40 @@ for item in sorted(traffic_data, key=lambda x: x['date']):
         item['sessions'],
         item['pageviews'],
         item['conversions'],
+        round(item.get('avg_duration', 0), 1),
+        round(item.get('bounce_rate', 0), 1),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ])
 
 ws_traffic.append_rows(rows_traffic)
 print(f"  ✓ {len(traffic_data)} rows written to 流入経路 sheet")
+
+# ===== CREATE/UPDATE PAGE BEHAVIOR SHEET =====
+print("\n💾 Updating page behavior sheet...")
+
+sheet_name_pages = 'ページ別行動'
+try:
+    ws_pages = sheet.worksheet(sheet_name_pages)
+    ws_pages.clear()
+except:
+    ws_pages = sheet.add_worksheet(sheet_name_pages, rows=6000, cols=8)
+
+rows_pages = [['日付', 'ページ', 'タイトル', 'PV数', '平均滞在時間(秒)', '直帰率(%)', '更新日時']]
+
+for item in sorted(page_data, key=lambda x: (x['date'], -x['pageviews'])):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_pages.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['path'],
+        item['title'],
+        item['pageviews'],
+        round(item['avg_duration'], 1),
+        round(item['bounce_rate'], 1),
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_pages.append_rows(rows_pages)
+print(f"  ✓ {len(page_data)} rows written to ページ別行動 sheet")
 
 # ===== CREATE/UPDATE PRODUCT SHEET =====
 print("\n💾 Updating product sheet...")
