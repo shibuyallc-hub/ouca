@@ -710,7 +710,10 @@
 
       const filtered = allAdsData.filter(row => {
         const dateOk = inRange(row.Date, range.start, range.end);
-        const platOk = platform === 'ALL' || row.Platform === platform;
+        // When "ALL" is selected, use the individual platform rows (Google,
+        // Meta, ...) rather than also including the pre-aggregated "ALL"
+        // row from the sheet - otherwise totals get double counted.
+        const platOk = platform === 'ALL' ? row.Platform !== 'ALL' : row.Platform === platform;
         return dateOk && platOk;
       });
 
@@ -735,15 +738,17 @@
     function displayData(data) {
       const tbody = document.getElementById('dataTable');
       tbody.innerHTML = '';
-      let totalSpend = 0, totalCV = 0;
+      let totalSpend = 0, totalCV = 0, totalRevenue = 0;
 
       data.forEach(row => {
         const spend = parseFloat(row['Spend (¥)']) || 0;
         const cv = parseFloat(row['Conversions']) || 0;
+        const revenue = parseFloat(row['Revenue (¥)']) || 0;
         totalSpend += spend;
         totalCV += cv;
+        totalRevenue += revenue;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(parseFloat(row['Revenue (¥)']) || 0)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}倍</td>`;
+        tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(revenue)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}倍</td>`;
         tbody.appendChild(tr);
       });
 
@@ -752,7 +757,7 @@
       }
 
       const avgCPA = totalCV > 0 ? totalSpend / totalCV : 0;
-      const roas = totalSpend > 0 ? (totalSpend / 0.3) / totalSpend : 0;
+      const roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
       document.getElementById('totalSpend').textContent = '¥' + formatNumber(totalSpend);
       document.getElementById('totalCV').textContent = formatNumber(totalCV);
       document.getElementById('avgCPA').textContent = '¥' + formatNumber(avgCPA);
