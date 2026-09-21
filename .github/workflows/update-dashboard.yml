@@ -2,8 +2,8 @@ name: Auto Update Dashboard
 
 on:
   schedule:
-    # 毎日 00:00 (UTC+0) = 日本時間 09:00 に実行
-    - cron: '0 0 * * *'
+    # 3時間おきに実行 (UTC 0,3,6,9,12,15,18,21時 = 日本時間 9,12,15,18,21,0,3,6時)
+    - cron: '0 */3 * * *'
   workflow_dispatch:  # 手動実行も可能
 
 jobs:
