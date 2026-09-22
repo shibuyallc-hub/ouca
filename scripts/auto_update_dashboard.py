@@ -366,11 +366,15 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
         # ----- Region/gender breakdown -----
         # NOTE: level='ad' + breakdowns='region,gender' hits Meta's request
         # complexity limit (too many possible ad x region x gender x day
-        # combinations) and returns 400. Keep this one at account level.
+        # combinations) and returns 400 - keep this one at account level.
+        # Also, Meta rejects breakdowns=region,gender when the 'actions'
+        # field is requested too ("combination of data breakdown columns
+        # (action_type, gender, region) is invalid") - so purchases aren't
+        # available on this cut; CV for Meta rows here is always 0.
         try:
             geo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
             geo_params = {
-                'fields': 'spend,clicks,impressions,actions',
+                'fields': 'spend,clicks,impressions',
                 'breakdowns': 'region,gender',
                 'time_range': json.dumps({'since': since, 'until': until}),
                 'time_increment': 1,
@@ -388,11 +392,6 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
                 payload = resp.json()
 
                 for row in payload.get('data', []):
-                    purchases = 0
-                    for action in row.get('actions', []):
-                        if action.get('action_type') in ('purchase', 'omni_purchase'):
-                            purchases += int(float(action.get('value', 0)))
-
                     meta_ads_geo_data.append({
                         'date': row['date_start'].replace('-', ''),
                         'region': row.get('region', '(不明)'),
@@ -400,7 +399,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
                         'spend': float(row.get('spend', 0)),
                         'clicks': int(row.get('clicks', 0)),
                         'impressions': int(row.get('impressions', 0)),
-                        'purchases': purchases,
+                        'purchases': 0,
                     })
 
                 next_url = payload.get('paging', {}).get('next')
