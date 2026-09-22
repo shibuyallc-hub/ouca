@@ -1364,10 +1364,116 @@
       }
       memos.forEach(memo => {
         const li = document.createElement('li');
-        const author = memo['記録者'] ? `（${memo['記録者']}）` : '';
-        li.textContent = `[${memo['記録日時']}]${author} ${memo['内容']}`;
+        li.dataset.memoId = memo['ID'] || '';
+        renderMemoView(li, memo);
         list.appendChild(li);
       });
+    }
+
+    function renderMemoView(li, memo) {
+      const author = memo['記録者'] ? `（${memo['記録者']}）` : '';
+      li.innerHTML = '';
+      const span = document.createElement('span');
+      span.textContent = `[${memo['記録日時']}]${author} ${memo['内容']}`;
+      li.appendChild(span);
+      if (memo['ID']) {
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '編集';
+        editBtn.style.cssText = 'margin-left:8px;padding:2px 8px;font-size:12px;border:1px solid #dee2e6;border-radius:4px;background:white;cursor:pointer;';
+        editBtn.onclick = () => renderMemoEdit(li, memo);
+        li.appendChild(editBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '削除';
+        delBtn.style.cssText = 'margin-left:4px;padding:2px 8px;font-size:12px;border:1px solid #e03131;color:#e03131;border-radius:4px;background:white;cursor:pointer;';
+        delBtn.onclick = () => deleteMemo(memo);
+        li.appendChild(delBtn);
+      }
+    }
+
+    function renderMemoEdit(li, memo) {
+      li.innerHTML = '';
+      const textarea = document.createElement('textarea');
+      textarea.value = memo['内容'];
+      textarea.rows = 2;
+      textarea.style.cssText = 'width:100%;padding:6px;border:1px solid #dee2e6;border-radius:4px;font-family:inherit;font-size:13px;box-sizing:border-box;';
+      li.appendChild(textarea);
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'margin-top:4px;display:flex;gap:6px;align-items:center;';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = '保存';
+      saveBtn.style.cssText = 'padding:3px 10px;font-size:12px;border:none;border-radius:4px;background:#2e7d32;color:white;cursor:pointer;';
+      saveBtn.onclick = () => updateMemo(li, memo, textarea.value.trim());
+      btnRow.appendChild(saveBtn);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'キャンセル';
+      cancelBtn.style.cssText = 'padding:3px 10px;font-size:12px;border:1px solid #dee2e6;border-radius:4px;background:white;cursor:pointer;';
+      cancelBtn.onclick = () => renderMemoView(li, memo);
+      btnRow.appendChild(cancelBtn);
+
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'memo-edit-status';
+      statusSpan.style.cssText = 'font-size:12px;color:#868e96;';
+      btnRow.appendChild(statusSpan);
+
+      li.appendChild(btnRow);
+    }
+
+    async function updateMemo(li, memo, newContent) {
+      const statusSpan = li.querySelector('.memo-edit-status');
+      if (!newContent) {
+        if (statusSpan) { statusSpan.textContent = '内容を入力してください'; statusSpan.style.color = '#e03131'; }
+        return;
+      }
+      if (statusSpan) { statusSpan.textContent = '保存中...'; statusSpan.style.color = '#868e96'; }
+      try {
+        const resp = await fetch(MEMO_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            secret: MEMO_API_SECRET,
+            action: 'update',
+            id: memo['ID'],
+            content: newContent,
+            author: memo['記録者'],
+          }),
+        });
+        const result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'unknown error');
+
+        memo['内容'] = newContent;
+        renderMemoView(li, memo);
+      } catch (e) {
+        console.error(e);
+        if (statusSpan) { statusSpan.textContent = '✗ 保存に失敗しました'; statusSpan.style.color = '#e03131'; }
+      }
+    }
+
+    async function deleteMemo(memo) {
+      if (!confirm('このメモを削除しますか？')) return;
+      try {
+        const resp = await fetch(MEMO_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            secret: MEMO_API_SECRET,
+            action: 'delete',
+            id: memo['ID'],
+          }),
+        });
+        const result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'unknown error');
+
+        const idx = allMemoData.indexOf(memo);
+        if (idx !== -1) allMemoData.splice(idx, 1);
+        renderMemoList(memo['対象週開始日']);
+      } catch (e) {
+        console.error(e);
+        alert('削除に失敗しました');
+      }
     }
 
     async function saveWeeklyMemo() {
@@ -1394,6 +1500,7 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             secret: MEMO_API_SECRET,
+            action: 'create',
             weekStart: weekStart,
             content: content,
             author: authorInput.value.trim(),
@@ -1403,6 +1510,7 @@
         if (!result.ok) throw new Error(result.error || 'unknown error');
 
         allMemoData.push({
+          'ID': result.id || '',
           '記録日時': new Date().toLocaleString('ja-JP'),
           '対象週開始日': weekStart,
           '内容': content,
