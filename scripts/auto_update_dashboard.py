@@ -101,6 +101,7 @@ except Exception as e:
 print("\n💰 Fetching Google Ads spend data...")
 
 google_ads_daily = {}
+google_ads_campaign_data = []
 
 if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET,
         GOOGLE_ADS_REFRESH_TOKEN, GOOGLE_ADS_CUSTOMER_ID]):
@@ -136,6 +137,30 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
 
         print(f"  ✓ {len(google_ads_daily)} days of Google Ads spend data found")
 
+        # ----- Campaign-level breakdown -----
+        gaql_campaign = f"""
+            SELECT segments.date, campaign.name, metrics.cost_micros,
+                   metrics.clicks, metrics.impressions, metrics.conversions,
+                   metrics.conversions_value
+            FROM campaign
+            WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
+        """
+        campaign_stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_campaign)
+
+        for batch in campaign_stream:
+            for row in batch.results:
+                google_ads_campaign_data.append({
+                    'date': row.segments.date.replace('-', ''),
+                    'campaign': row.campaign.name,
+                    'spend': row.metrics.cost_micros / 1_000_000,
+                    'clicks': row.metrics.clicks,
+                    'impressions': row.metrics.impressions,
+                    'conversions': row.metrics.conversions,
+                    'conversions_value': row.metrics.conversions_value,
+                })
+
+        print(f"  ✓ {len(google_ads_campaign_data)} campaign/date records found")
+
     except Exception as e:
         print(f"  ✗ Google Ads API error: {e}")
 else:
@@ -145,6 +170,7 @@ else:
 print("\n💰 Fetching Meta Ads spend data...")
 
 meta_ads_daily = {}
+meta_ads_ad_data = []
 
 if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
     try:
@@ -177,6 +203,45 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
             next_params = None  # 'next' already includes all query params
 
         print(f"  ✓ {len(meta_ads_daily)} days of Meta Ads spend data found")
+
+        # ----- Ad-level breakdown -----
+        ad_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
+        ad_params = {
+            'fields': 'ad_name,campaign_name,spend,clicks,impressions,actions',
+            'level': 'ad',
+            'time_range': json.dumps({'since': since, 'until': until}),
+            'time_increment': 1,
+            'limit': 500,
+            'access_token': META_ACCESS_TOKEN,
+        }
+
+        next_url = ad_url
+        next_params = ad_params
+        while next_url:
+            resp = requests.get(next_url, params=next_params, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+
+            for row in payload.get('data', []):
+                purchases = 0
+                for action in row.get('actions', []):
+                    if action.get('action_type') in ('purchase', 'omni_purchase'):
+                        purchases += int(float(action.get('value', 0)))
+
+                meta_ads_ad_data.append({
+                    'date': row['date_start'].replace('-', ''),
+                    'ad_name': row.get('ad_name', '(不明)'),
+                    'campaign_name': row.get('campaign_name', '(不明)'),
+                    'spend': float(row.get('spend', 0)),
+                    'clicks': int(row.get('clicks', 0)),
+                    'impressions': int(row.get('impressions', 0)),
+                    'purchases': purchases,
+                })
+
+            next_url = payload.get('paging', {}).get('next')
+            next_params = None
+
+        print(f"  ✓ {len(meta_ads_ad_data)} ad/date records found")
 
     except Exception as e:
         print(f"  ✗ Meta Ads API error: {e}")
@@ -567,6 +632,62 @@ for item in sorted(product_data, key=lambda x: (x['date'], -x['revenue'])):
 
 ws_product.append_rows(rows_product)
 print(f"  ✓ {len(product_data)} rows written to 商品別 sheet")
+
+# ===== CREATE/UPDATE GOOGLE ADS CAMPAIGN SHEET =====
+print("\n💾 Updating Google Ads campaign sheet...")
+
+sheet_name_gcamp = 'Google_キャンペーン別'
+try:
+    ws_gcamp = sheet.worksheet(sheet_name_gcamp)
+    ws_gcamp.clear()
+except:
+    ws_gcamp = sheet.add_worksheet(sheet_name_gcamp, rows=3000, cols=10)
+
+rows_gcamp = [['日付', 'キャンペーン名', '広告費(¥)', 'クリック数', '表示回数', 'CV数(Google計測)', 'CV値(¥)', '更新日時']]
+
+for item in sorted(google_ads_campaign_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_gcamp.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['campaign'],
+        round(item['spend'], 0),
+        int(item['clicks']),
+        int(item['impressions']),
+        round(item['conversions'], 2),
+        round(item['conversions_value'], 0),
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_gcamp.append_rows(rows_gcamp)
+print(f"  ✓ {len(google_ads_campaign_data)} rows written to Google_キャンペーン別 sheet")
+
+# ===== CREATE/UPDATE META ADS AD-LEVEL SHEET =====
+print("\n💾 Updating Meta Ads ad-level sheet...")
+
+sheet_name_mad = 'Meta_広告別'
+try:
+    ws_mad = sheet.worksheet(sheet_name_mad)
+    ws_mad.clear()
+except:
+    ws_mad = sheet.add_worksheet(sheet_name_mad, rows=3000, cols=10)
+
+rows_mad = [['日付', '広告名', 'キャンペーン名', '広告費(¥)', 'クリック数', '表示回数', '購入数(Meta計測)', '更新日時']]
+
+for item in sorted(meta_ads_ad_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_mad.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['ad_name'],
+        item['campaign_name'],
+        round(item['spend'], 0),
+        int(item['clicks']),
+        int(item['impressions']),
+        item['purchases'],
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_mad.append_rows(rows_mad)
+print(f"  ✓ {len(meta_ads_ad_data)} rows written to Meta_広告別 sheet")
 
 # ===== FINAL SUMMARY =====
 print(f"\n" + "="*70)

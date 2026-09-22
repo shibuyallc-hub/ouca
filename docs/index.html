@@ -224,6 +224,47 @@
           </tbody>
         </table>
       </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 5px;">🔍 Google広告 キャンペーン別（選択期間）</h2>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※CV数・CV値はGoogle広告自身の計測です（他タブのCVはGA4の購入イベントのみを基準にしており、算出方法が異なります）。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>キャンペーン名</th>
+              <th>広告費(¥)</th>
+              <th>クリック数</th>
+              <th>表示回数</th>
+              <th>CTR</th>
+              <th>CV数</th>
+              <th>CV値(¥)</th>
+            </tr>
+          </thead>
+          <tbody id="googleCampaignTable">
+            <tr><td colspan="7" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 5px;">🔍 Meta広告 広告別（選択期間）</h2>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※購入数はMeta自身の計測です（他タブのCVはGA4の購入イベントのみを基準にしており、算出方法が異なります）。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>広告名</th>
+              <th>キャンペーン名</th>
+              <th>広告費(¥)</th>
+              <th>クリック数</th>
+              <th>表示回数</th>
+              <th>購入数</th>
+            </tr>
+          </thead>
+          <tbody id="metaAdTable">
+            <tr><td colspan="6" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div id="summary" class="sheet-content">
@@ -394,6 +435,8 @@
     let allTrafficData = [];
     let allProductData = [];
     let allPageData = [];
+    let allGoogleCampaignData = [];
+    let allMetaAdData = [];
 
     // NOTE: these must stay declared before checkLogin()/the auto-login
     // block below, since a returning visitor with a valid session runs
@@ -540,6 +583,8 @@
         renderAdsTab();
         renderTrafficTab();
         renderProductTab();
+        renderGoogleCampaignTab();
+        renderMetaAdTab();
       });
     }
 
@@ -681,20 +726,26 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, pageCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
           fetch(sheetCsvUrl('ページ別行動')).then(r => r.text()),
+          fetch(sheetCsvUrl('Google_キャンペーン別')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('Meta_広告別')).then(r => r.text()).catch(() => ''),
         ]);
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
         allProductData = parseCSV(productCsv);
         allPageData = parseCSV(pageCsv);
+        allGoogleCampaignData = parseCSV(gCampCsv);
+        allMetaAdData = parseCSV(metaAdCsv);
 
         renderAdsTab();
         renderTrafficTab();
         renderProductTab();
+        renderGoogleCampaignTab();
+        renderMetaAdTab();
 
         document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ja-JP');
         showStatus('✓ データを取得しました', 'success');
@@ -789,6 +840,78 @@
       summary.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ===================== GOOGLE CAMPAIGN TAB =====================
+    function renderGoogleCampaignTab() {
+      const range = currentRange;
+      if (!range) return;
+      const tbody = document.getElementById('googleCampaignTable');
+      if (!tbody) return;
+
+      const filtered = allGoogleCampaignData.filter(row => inRange(row['日付'], range.start, range.end));
+
+      const byCampaign = {};
+      filtered.forEach(row => {
+        const name = row['キャンペーン名'] || '(不明)';
+        if (!byCampaign[name]) {
+          byCampaign[name] = { spend: 0, clicks: 0, impressions: 0, cv: 0, cvValue: 0 };
+        }
+        byCampaign[name].spend += parseFloat(row['広告費(¥)']) || 0;
+        byCampaign[name].clicks += parseFloat(row['クリック数']) || 0;
+        byCampaign[name].impressions += parseFloat(row['表示回数']) || 0;
+        byCampaign[name].cv += parseFloat(row['CV数(Google計測)']) || 0;
+        byCampaign[name].cvValue += parseFloat(row['CV値(¥)']) || 0;
+      });
+
+      const rows = Object.entries(byCampaign).sort((a, b) => b[1].spend - a[1].spend);
+
+      tbody.innerHTML = '';
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        return;
+      }
+      rows.forEach(([name, agg]) => {
+        const ctr = agg.impressions > 0 ? (agg.clicks / agg.impressions * 100).toFixed(2) + '%' : '-';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${name}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${ctr}</td><td>${agg.cv.toFixed(1)}</td><td>¥${formatNumber(agg.cvValue)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ===================== META AD TAB =====================
+    function renderMetaAdTab() {
+      const range = currentRange;
+      if (!range) return;
+      const tbody = document.getElementById('metaAdTable');
+      if (!tbody) return;
+
+      const filtered = allMetaAdData.filter(row => inRange(row['日付'], range.start, range.end));
+
+      const byAd = {};
+      filtered.forEach(row => {
+        const key = (row['広告名'] || '(不明)') + '|||' + (row['キャンペーン名'] || '(不明)');
+        if (!byAd[key]) {
+          byAd[key] = { adName: row['広告名'] || '(不明)', campaignName: row['キャンペーン名'] || '(不明)', spend: 0, clicks: 0, impressions: 0, purchases: 0 };
+        }
+        byAd[key].spend += parseFloat(row['広告費(¥)']) || 0;
+        byAd[key].clicks += parseFloat(row['クリック数']) || 0;
+        byAd[key].impressions += parseFloat(row['表示回数']) || 0;
+        byAd[key].purchases += parseFloat(row['購入数(Meta計測)']) || 0;
+      });
+
+      const rows = Object.values(byAd).sort((a, b) => b.spend - a.spend);
+
+      tbody.innerHTML = '';
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        return;
+      }
+      rows.forEach(agg => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${agg.adName}</td><td>${agg.campaignName}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${formatNumber(agg.purchases)}</td>`;
         tbody.appendChild(tr);
       });
     }
