@@ -13,7 +13,7 @@ from google.oauth2 import service_account
 import gspread
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
-    RunReportRequest, Dimension, Metric, DateRange, FilterExpression, Filter
+    RunReportRequest, Dimension, Metric, DateRange, FilterExpression, FilterExpressionList, Filter
 )
 
 # Only the 'purchase' event counts as a conversion for this dashboard,
@@ -23,6 +23,18 @@ PURCHASE_ONLY_FILTER = FilterExpression(
         field_name="eventName",
         string_filter=Filter.StringFilter(value="purchase"),
     )
+)
+
+# Ad-driven traffic only (used by the 詳細分析 breakdowns: age/gender, region, events).
+ADS_CHANNEL_FILTER = FilterExpression(
+    filter=Filter(
+        field_name="sessionDefaultChannelGroup",
+        in_list_filter=Filter.InListFilter(values=["Paid Search", "Paid Social"]),
+    )
+)
+
+PURCHASE_ADS_FILTER = FilterExpression(
+    and_group=FilterExpressionList(expressions=[PURCHASE_ONLY_FILTER, ADS_CHANNEL_FILTER])
 )
 from collections import defaultdict
 
@@ -436,6 +448,172 @@ except Exception as e:
     print(f"  ✗ Product data error: {e}")
     product_data = []
 
+# ===== FETCH AGE/GENDER BREAKDOWN (ADS TRAFFIC ONLY) =====
+print("\n👥 Fetching age/gender breakdown (ads traffic only)...")
+
+try:
+    request_age_gender = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="userAgeBracket"),
+            Dimension(name="userGender"),
+        ],
+        metrics=[
+            Metric(name="sessions"),
+            Metric(name="bounceRate"),
+            Metric(name="averageSessionDuration"),
+        ],
+        dimension_filter=ADS_CHANNEL_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_age_gender = ga4_client.run_report(request_age_gender)
+    age_gender_map = {}
+
+    for row in response_age_gender.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value)
+        age_gender_map[key] = {
+            'date': row.dimension_values[0].value,
+            'age': row.dimension_values[1].value,
+            'gender': row.dimension_values[2].value,
+            'sessions': int(float(row.metric_values[0].value)),
+            'bounce_rate': float(row.metric_values[1].value) * 100,
+            'avg_duration': float(row.metric_values[2].value),
+            'conversions': 0,
+        }
+
+    request_age_gender_cv = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="userAgeBracket"),
+            Dimension(name="userGender"),
+        ],
+        metrics=[Metric(name="eventCount")],
+        dimension_filter=PURCHASE_ADS_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_age_gender_cv = ga4_client.run_report(request_age_gender_cv)
+
+    for row in response_age_gender_cv.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value)
+        cv = int(float(row.metric_values[0].value))
+        if key in age_gender_map:
+            age_gender_map[key]['conversions'] = cv
+        else:
+            age_gender_map[key] = {
+                'date': row.dimension_values[0].value,
+                'age': row.dimension_values[1].value,
+                'gender': row.dimension_values[2].value,
+                'sessions': 0,
+                'bounce_rate': 0,
+                'avg_duration': 0,
+                'conversions': cv,
+            }
+
+    age_gender_data = list(age_gender_map.values())
+    print(f"  ✓ {len(age_gender_data)} age/gender/date records found")
+
+except Exception as e:
+    print(f"  ✗ Age/gender breakdown error: {e}")
+    age_gender_data = []
+
+# ===== FETCH REGION BREAKDOWN (ADS TRAFFIC ONLY) =====
+print("\n🗺️ Fetching region breakdown (ads traffic only)...")
+
+try:
+    request_region = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="region"),
+        ],
+        metrics=[
+            Metric(name="sessions"),
+            Metric(name="bounceRate"),
+            Metric(name="averageSessionDuration"),
+        ],
+        dimension_filter=ADS_CHANNEL_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_region = ga4_client.run_report(request_region)
+    region_map = {}
+
+    for row in response_region.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value)
+        region_map[key] = {
+            'date': row.dimension_values[0].value,
+            'region': row.dimension_values[1].value or '(不明)',
+            'sessions': int(float(row.metric_values[0].value)),
+            'bounce_rate': float(row.metric_values[1].value) * 100,
+            'avg_duration': float(row.metric_values[2].value),
+            'conversions': 0,
+        }
+
+    request_region_cv = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="region"),
+        ],
+        metrics=[Metric(name="eventCount")],
+        dimension_filter=PURCHASE_ADS_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_region_cv = ga4_client.run_report(request_region_cv)
+
+    for row in response_region_cv.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value)
+        cv = int(float(row.metric_values[0].value))
+        if key in region_map:
+            region_map[key]['conversions'] = cv
+        else:
+            region_map[key] = {
+                'date': row.dimension_values[0].value,
+                'region': row.dimension_values[1].value or '(不明)',
+                'sessions': 0,
+                'bounce_rate': 0,
+                'avg_duration': 0,
+                'conversions': cv,
+            }
+
+    region_data = list(region_map.values())
+    print(f"  ✓ {len(region_data)} region/date records found")
+
+except Exception as e:
+    print(f"  ✗ Region breakdown error: {e}")
+    region_data = []
+
+# ===== FETCH EVENT BREAKDOWN (ADS TRAFFIC ONLY) =====
+print("\n📣 Fetching event breakdown (ads traffic only)...")
+
+try:
+    request_events = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="eventName"),
+        ],
+        metrics=[Metric(name="eventCount")],
+        dimension_filter=ADS_CHANNEL_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_events = ga4_client.run_report(request_events)
+    event_data = []
+
+    for row in response_events.rows:
+        event_data.append({
+            'date': row.dimension_values[0].value,
+            'event_name': row.dimension_values[1].value,
+            'count': int(float(row.metric_values[0].value)),
+        })
+
+    print(f"  ✓ {len(event_data)} event/date records found")
+
+except Exception as e:
+    print(f"  ✗ Event breakdown error: {e}")
+    event_data = []
+
 # ===== OPEN GOOGLE SHEETS =====
 print("\n🔗 Opening Google Sheets...")
 sheet = gc.open_by_key(SPREADSHEET_ID)
@@ -688,6 +866,85 @@ for item in sorted(meta_ads_ad_data, key=lambda x: x['date']):
 
 ws_mad.append_rows(rows_mad)
 print(f"  ✓ {len(meta_ads_ad_data)} rows written to Meta_広告別 sheet")
+
+# ===== CREATE/UPDATE AGE/GENDER BREAKDOWN SHEET =====
+print("\n💾 Updating age/gender breakdown sheet...")
+
+sheet_name_agegender = 'GA4_年齢性別'
+try:
+    ws_agegender = sheet.worksheet(sheet_name_agegender)
+    ws_agegender.clear()
+except:
+    ws_agegender = sheet.add_worksheet(sheet_name_agegender, rows=6000, cols=8)
+
+rows_agegender = [['日付', '年齢層', '性別', 'セッション数', '直帰率(%)', '平均滞在時間(秒)', 'CV数', '更新日時']]
+
+for item in sorted(age_gender_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_agegender.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['age'],
+        item['gender'],
+        item['sessions'],
+        round(item['bounce_rate'], 1),
+        round(item['avg_duration'], 0),
+        item['conversions'],
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_agegender.append_rows(rows_agegender)
+print(f"  ✓ {len(age_gender_data)} rows written to GA4_年齢性別 sheet")
+
+# ===== CREATE/UPDATE REGION BREAKDOWN SHEET =====
+print("\n💾 Updating region breakdown sheet...")
+
+sheet_name_region = 'GA4_地域別'
+try:
+    ws_region = sheet.worksheet(sheet_name_region)
+    ws_region.clear()
+except:
+    ws_region = sheet.add_worksheet(sheet_name_region, rows=6000, cols=8)
+
+rows_region = [['日付', '地域', 'セッション数', '直帰率(%)', '平均滞在時間(秒)', 'CV数', '更新日時']]
+
+for item in sorted(region_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_region.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['region'],
+        item['sessions'],
+        round(item['bounce_rate'], 1),
+        round(item['avg_duration'], 0),
+        item['conversions'],
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_region.append_rows(rows_region)
+print(f"  ✓ {len(region_data)} rows written to GA4_地域別 sheet")
+
+# ===== CREATE/UPDATE EVENT BREAKDOWN SHEET =====
+print("\n💾 Updating event breakdown sheet...")
+
+sheet_name_event = 'GA4_イベント別'
+try:
+    ws_event = sheet.worksheet(sheet_name_event)
+    ws_event.clear()
+except:
+    ws_event = sheet.add_worksheet(sheet_name_event, rows=6000, cols=6)
+
+rows_event = [['日付', 'イベント名', '発生回数', '更新日時']]
+
+for item in sorted(event_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_event.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['event_name'],
+        item['count'],
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_event.append_rows(rows_event)
+print(f"  ✓ {len(event_data)} rows written to GA4_イベント別 sheet")
 
 # ===== FINAL SUMMARY =====
 print(f"\n" + "="*70)
