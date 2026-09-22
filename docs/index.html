@@ -433,14 +433,26 @@
     <div id="detail" class="sheet-content">
       <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※このタブは広告経由（Google広告・Meta広告）のアクセスのみを対象にした分析です。選択期間はページ上部の日付範囲に連動します。</p>
 
+      <div class="controls">
+        <div class="control-group">
+          <label>📊 媒体</label>
+          <select id="detailPlatformFilter">
+            <option value="ALL">すべての媒体</option>
+            <option value="Google">Google広告</option>
+            <option value="Meta">Meta広告</option>
+          </select>
+        </div>
+      </div>
+
       <div class="data-table">
         <h2 style="margin-bottom: 5px;">👥 年齢層×性別（選択期間・広告経由のみ）</h2>
-        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※基本は各広告媒体自身の計測データです。媒体側で年齢・性別が取得できない場合（例：Google Performance Maxは非対応）はGA4の参考値で代用しています。データソース列で判別できます。</p>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※基本は各広告媒体自身の計測データです。媒体側で年齢・性別が取得できない場合（例：Google Performance Maxは非対応）はGA4の参考値で代用しています。データソース列で判別できます。Googleはキャンペーン別、Metaは広告別の内訳です。</p>
         <table>
           <thead>
             <tr>
               <th>媒体</th>
               <th>データソース</th>
+              <th>キャンペーン/広告</th>
               <th>年齢層</th>
               <th>性別</th>
               <th>広告費(¥)</th>
@@ -449,7 +461,7 @@
             </tr>
           </thead>
           <tbody id="ageGenderTable">
-            <tr><td colspan="7" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -468,6 +480,30 @@
           </thead>
           <tbody id="regionTable">
             <tr><td colspan="5" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 5px;">🗺️ エリア×性別（選択期間・広告経由のみ）</h2>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※広告費・クリック数・CTR・CPCはMeta広告自身の計測です（広告別の内訳）。Googleはエリア×性別を横断計測するAPIが無いためGA4のセッションデータで代用し、広告費等は「-」表示になります。直帰率・平均滞在時間は媒体を問わずGA4のデータです。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>媒体</th>
+              <th>キャンペーン/広告</th>
+              <th>エリア</th>
+              <th>性別</th>
+              <th>広告費(¥)</th>
+              <th>CTR</th>
+              <th>CPC(¥)</th>
+              <th>直帰率</th>
+              <th>平均滞在時間</th>
+              <th>CV数</th>
+            </tr>
+          </thead>
+          <tbody id="regionGenderTable">
+            <tr><td colspan="10" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -501,6 +537,7 @@
     let allAgeGenderData = [];
     let allRegionData = [];
     let allEventData = [];
+    let allRegionGenderData = [];
 
     // NOTE: these must stay declared before checkLogin()/the auto-login
     // block below, since a returning visitor with a valid session runs
@@ -791,7 +828,7 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
@@ -801,6 +838,7 @@
           fetch(sheetCsvUrl('広告_年齢性別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('GA4_地域別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('GA4_イベント別')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('広告_エリア性別')).then(r => r.text()).catch(() => ''),
         ]);
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
@@ -811,6 +849,7 @@
         allAgeGenderData = parseCSV(ageGenderCsv);
         allRegionData = parseCSV(regionCsv);
         allEventData = parseCSV(eventCsv);
+        allRegionGenderData = parseCSV(regionGenderCsv);
 
         renderAdsTab();
         renderTrafficTab();
@@ -996,22 +1035,29 @@
       if (!range) return;
       renderAgeGenderTable(range);
       renderRegionTable(range);
+      renderRegionGenderTable(range);
       renderEventTable(range);
     }
 
     function renderAgeGenderTable(range) {
       const tbody = document.getElementById('ageGenderTable');
       if (!tbody) return;
-      const filtered = allAgeGenderData.filter(row => inRange(row['日付'], range.start, range.end));
+      const platformFilter = document.getElementById('detailPlatformFilter').value;
+      const filtered = allAgeGenderData.filter(row => {
+        if (!inRange(row['日付'], range.start, range.end)) return false;
+        if (platformFilter !== 'ALL' && row['媒体'] !== platformFilter) return false;
+        return true;
+      });
 
       const byKey = {};
       filtered.forEach(row => {
         const platform = row['媒体'] || '(不明)';
         const source = row['データソース'] || '(不明)';
-        const key = [platform, source, row['年齢層'] || '(不明)', row['性別'] || '(不明)'].join('|||');
+        const unit = row['キャンペーン/広告'] || '全体';
+        const key = [platform, source, unit, row['年齢層'] || '(不明)', row['性別'] || '(不明)'].join('|||');
         if (!byKey[key]) {
           byKey[key] = {
-            platform, source,
+            platform, source, unit,
             age: row['年齢層'] || '(不明)', gender: row['性別'] || '(不明)',
             sessions: 0, spend: 0, clicks: 0, cv: 0,
           };
@@ -1026,13 +1072,13 @@
 
       tbody.innerHTML = '';
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
         return;
       }
       rows.forEach(agg => {
         const clicksOrSessions = agg.source === '広告媒体' ? formatNumber(agg.clicks) : formatNumber(agg.sessions);
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${agg.platform}</td><td>${agg.source}</td><td>${agg.age}</td><td>${agg.gender}</td><td>¥${formatNumber(agg.spend)}</td><td>${clicksOrSessions}</td><td>${formatNumber(agg.cv)}</td>`;
+        tr.innerHTML = `<td>${agg.platform}</td><td>${agg.source}</td><td>${agg.unit}</td><td>${agg.age}</td><td>${agg.gender}</td><td>¥${formatNumber(agg.spend)}</td><td>${clicksOrSessions}</td><td>${formatNumber(agg.cv)}</td>`;
         tbody.appendChild(tr);
       });
     }
@@ -1067,6 +1113,59 @@
         const avgBounce = agg.sessions > 0 ? agg.bounceWeighted / agg.sessions : 0;
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${agg.region}</td><td>${formatNumber(agg.sessions)}</td><td>${avgBounce.toFixed(1)}%</td><td>${formatDuration(avgDuration)}</td><td>${formatNumber(agg.cv)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderRegionGenderTable(range) {
+      const tbody = document.getElementById('regionGenderTable');
+      if (!tbody) return;
+      const platformFilter = document.getElementById('detailPlatformFilter').value;
+      const filtered = allRegionGenderData.filter(row => {
+        if (!inRange(row['日付'], range.start, range.end)) return false;
+        if (platformFilter !== 'ALL' && row['媒体'] !== platformFilter) return false;
+        return true;
+      });
+
+      const byKey = {};
+      filtered.forEach(row => {
+        const platform = row['媒体'] || '(不明)';
+        const unit = row['キャンペーン/広告'] || '全体';
+        const region = row['エリア'] || '(不明)';
+        const gender = row['性別'] || '(不明)';
+        const key = [platform, unit, region, gender].join('|||');
+        if (!byKey[key]) {
+          byKey[key] = {
+            platform, unit, region, gender,
+            spend: 0, clicks: 0, impressions: 0, cv: 0,
+            sessions: 0, bounceWeighted: 0, durationWeighted: 0,
+          };
+        }
+        const sessions = parseFloat(row['セッション数']) || 0;
+        byKey[key].spend += parseFloat(row['広告費(¥)']) || 0;
+        byKey[key].clicks += parseFloat(row['クリック数']) || 0;
+        byKey[key].impressions += parseFloat(row['表示回数']) || 0;
+        byKey[key].cv += parseFloat(row['CV数']) || 0;
+        byKey[key].sessions += sessions;
+        byKey[key].bounceWeighted += (parseFloat(row['直帰率(%)']) || 0) * sessions;
+        byKey[key].durationWeighted += (parseFloat(row['平均滞在時間(秒)']) || 0) * sessions;
+      });
+
+      const rows = Object.values(byKey).sort((a, b) => (b.spend + b.sessions) - (a.spend + a.sessions));
+
+      tbody.innerHTML = '';
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        return;
+      }
+      rows.forEach(agg => {
+        const ctr = agg.impressions > 0 ? (agg.clicks / agg.impressions * 100).toFixed(2) + '%' : '-';
+        const cpc = agg.clicks > 0 ? '¥' + formatNumber(agg.spend / agg.clicks) : '-';
+        const spendDisplay = agg.spend > 0 || agg.clicks > 0 ? '¥' + formatNumber(agg.spend) : '-';
+        const avgBounce = agg.sessions > 0 ? (agg.bounceWeighted / agg.sessions).toFixed(1) + '%' : '-';
+        const avgDuration = agg.sessions > 0 ? formatDuration(agg.durationWeighted / agg.sessions) : '-';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${agg.platform}</td><td>${agg.unit}</td><td>${agg.region}</td><td>${agg.gender}</td><td>${spendDisplay}</td><td>${ctr}</td><td>${cpc}</td><td>${avgBounce}</td><td>${avgDuration}</td><td>${formatNumber(agg.cv)}</td>`;
         tbody.appendChild(tr);
       });
     }
@@ -1358,11 +1457,13 @@
     document.getElementById('platform').addEventListener('change', renderAdsTab);
     document.getElementById('productChannel').addEventListener('change', renderProductTab);
     document.getElementById('trafficChannelFilter').addEventListener('change', renderTrafficTab);
+    document.getElementById('detailPlatformFilter').addEventListener('change', renderDetailTab);
 
     function resetFilters() {
       document.getElementById('platform').value = 'ALL';
       document.getElementById('productChannel').value = 'ALL';
       document.getElementById('trafficChannelFilter').value = 'ALL';
+      document.getElementById('detailPlatformFilter').value = 'ALL';
       if (globalRangeController) globalRangeController.applyPreset('last30');
     }
   </script>

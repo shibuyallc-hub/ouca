@@ -38,6 +38,28 @@ PURCHASE_ADS_FILTER = FilterExpression(
 )
 from collections import defaultdict
 
+# GA4's `region` dimension returns Japanese prefectures in English; translate
+# for display. Non-Japan regions (foreign visitors) are left as-is.
+REGION_JA = {
+    'Hokkaido': '北海道', 'Aomori': '青森県', 'Iwate': '岩手県', 'Miyagi': '宮城県',
+    'Akita': '秋田県', 'Yamagata': '山形県', 'Fukushima': '福島県', 'Ibaraki': '茨城県',
+    'Tochigi': '栃木県', 'Gunma': '群馬県', 'Saitama': '埼玉県', 'Chiba': '千葉県',
+    'Tokyo': '東京都', 'Kanagawa': '神奈川県', 'Niigata': '新潟県', 'Toyama': '富山県',
+    'Ishikawa': '石川県', 'Fukui': '福井県', 'Yamanashi': '山梨県', 'Nagano': '長野県',
+    'Gifu': '岐阜県', 'Shizuoka': '静岡県', 'Aichi': '愛知県', 'Mie': '三重県',
+    'Shiga': '滋賀県', 'Kyoto': '京都府', 'Osaka': '大阪府', 'Hyogo': '兵庫県',
+    'Nara': '奈良県', 'Wakayama': '和歌山県', 'Tottori': '鳥取県', 'Shimane': '島根県',
+    'Okayama': '岡山県', 'Hiroshima': '広島県', 'Yamaguchi': '山口県', 'Tokushima': '徳島県',
+    'Kagawa': '香川県', 'Ehime': '愛媛県', 'Kochi': '高知県', 'Fukuoka': '福岡県',
+    'Saga': '佐賀県', 'Nagasaki': '長崎県', 'Kumamoto': '熊本県', 'Oita': '大分県',
+    'Miyazaki': '宮崎県', 'Kagoshima': '鹿児島県', 'Okinawa': '沖縄県',
+    '(not set)': '(不明)',
+}
+
+
+def region_to_ja(name):
+    return REGION_JA.get(name, name)
+
 # ===== CONFIGURATION =====
 SERVICE_ACCOUNT_JSON_PATH = os.getenv('SERVICE_ACCOUNT_JSON_PATH', 'service_account.json')
 SPREADSHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM'
@@ -177,7 +199,7 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
 
         # ----- Age/gender breakdown (not supported for Performance Max) -----
         gaql_age = f"""
-            SELECT segments.date, ad_group_criterion.age_range.type,
+            SELECT segments.date, campaign.name, ad_group_criterion.age_range.type,
                    metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
             FROM age_range_view
             WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
@@ -187,6 +209,7 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
             for row in batch.results:
                 google_ads_age_data.append({
                     'date': row.segments.date.replace('-', ''),
+                    'campaign': row.campaign.name,
                     'age': row.ad_group_criterion.age_range.type_.name,
                     'spend': row.metrics.cost_micros / 1_000_000,
                     'clicks': row.metrics.clicks,
@@ -195,7 +218,7 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
                 })
 
         gaql_gender = f"""
-            SELECT segments.date, ad_group_criterion.gender.type,
+            SELECT segments.date, campaign.name, ad_group_criterion.gender.type,
                    metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
             FROM gender_view
             WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
@@ -205,6 +228,7 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
             for row in batch.results:
                 google_ads_gender_data.append({
                     'date': row.segments.date.replace('-', ''),
+                    'campaign': row.campaign.name,
                     'gender': row.ad_group_criterion.gender.type_.name,
                     'spend': row.metrics.cost_micros / 1_000_000,
                     'clicks': row.metrics.clicks,
@@ -225,6 +249,7 @@ print("\n💰 Fetching Meta Ads spend data...")
 meta_ads_daily = {}
 meta_ads_ad_data = []
 meta_ads_demo_data = []
+meta_ads_geo_data = []
 
 if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
     try:
@@ -297,10 +322,11 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
 
         print(f"  ✓ {len(meta_ads_ad_data)} ad/date records found")
 
-        # ----- Age/gender breakdown -----
+        # ----- Age/gender breakdown (per ad) -----
         demo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
         demo_params = {
-            'fields': 'spend,clicks,impressions,actions',
+            'fields': 'ad_name,spend,clicks,impressions,actions',
+            'level': 'ad',
             'breakdowns': 'age,gender',
             'time_range': json.dumps({'since': since, 'until': until}),
             'time_increment': 1,
@@ -323,6 +349,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
 
                 meta_ads_demo_data.append({
                     'date': row['date_start'].replace('-', ''),
+                    'ad_name': row.get('ad_name', '(不明)'),
                     'age': row.get('age', '(不明)'),
                     'gender': row.get('gender', '(不明)'),
                     'spend': float(row.get('spend', 0)),
@@ -335,6 +362,47 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
             next_params = None
 
         print(f"  ✓ {len(meta_ads_demo_data)} age/gender records found")
+
+        # ----- Region/gender breakdown (per ad) -----
+        geo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
+        geo_params = {
+            'fields': 'ad_name,spend,clicks,impressions,actions',
+            'level': 'ad',
+            'breakdowns': 'region,gender',
+            'time_range': json.dumps({'since': since, 'until': until}),
+            'time_increment': 1,
+            'limit': 500,
+            'access_token': META_ACCESS_TOKEN,
+        }
+
+        next_url = geo_url
+        next_params = geo_params
+        while next_url:
+            resp = requests.get(next_url, params=next_params, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+
+            for row in payload.get('data', []):
+                purchases = 0
+                for action in row.get('actions', []):
+                    if action.get('action_type') in ('purchase', 'omni_purchase'):
+                        purchases += int(float(action.get('value', 0)))
+
+                meta_ads_geo_data.append({
+                    'date': row['date_start'].replace('-', ''),
+                    'ad_name': row.get('ad_name', '(不明)'),
+                    'region': row.get('region', '(不明)'),
+                    'gender': row.get('gender', '(不明)'),
+                    'spend': float(row.get('spend', 0)),
+                    'clicks': int(row.get('clicks', 0)),
+                    'impressions': int(row.get('impressions', 0)),
+                    'purchases': purchases,
+                })
+
+            next_url = payload.get('paging', {}).get('next')
+            next_params = None
+
+        print(f"  ✓ {len(meta_ads_geo_data)} region/gender records found")
 
     except Exception as e:
         print(f"  ✗ Meta Ads API error: {e}")
@@ -631,7 +699,7 @@ try:
         key = (row.dimension_values[0].value, row.dimension_values[1].value)
         region_map[key] = {
             'date': row.dimension_values[0].value,
-            'region': row.dimension_values[1].value or '(不明)',
+            'region': region_to_ja(row.dimension_values[1].value or '(不明)'),
             'sessions': int(float(row.metric_values[0].value)),
             'bounce_rate': float(row.metric_values[1].value) * 100,
             'avg_duration': float(row.metric_values[2].value),
@@ -658,7 +726,7 @@ try:
         else:
             region_map[key] = {
                 'date': row.dimension_values[0].value,
-                'region': row.dimension_values[1].value or '(不明)',
+                'region': region_to_ja(row.dimension_values[1].value or '(不明)'),
                 'sessions': 0,
                 'bounce_rate': 0,
                 'avg_duration': 0,
@@ -671,6 +739,84 @@ try:
 except Exception as e:
     print(f"  ✗ Region breakdown error: {e}")
     region_data = []
+
+# ===== FETCH REGION x GENDER BREAKDOWN (GA4, ADS TRAFFIC ONLY) =====
+# Engagement metrics (bounce rate / session duration) only exist in GA4 -
+# ad platforms don't track landing-page behavior. Used to enrich the
+# region x gender table with these regardless of which platform has native
+# spend/click data for that same cut.
+print("\n🗺️ Fetching region x gender engagement breakdown from GA4 (ads traffic only)...")
+
+try:
+    request_region_gender = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="region"),
+            Dimension(name="userGender"),
+            Dimension(name="sessionDefaultChannelGroup"),
+        ],
+        metrics=[
+            Metric(name="sessions"),
+            Metric(name="bounceRate"),
+            Metric(name="averageSessionDuration"),
+        ],
+        dimension_filter=ADS_CHANNEL_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_region_gender = ga4_client.run_report(request_region_gender)
+    region_gender_map = {}
+
+    for row in response_region_gender.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value, row.dimension_values[3].value)
+        region_gender_map[key] = {
+            'date': row.dimension_values[0].value,
+            'region': region_to_ja(row.dimension_values[1].value or '(不明)'),
+            'gender': row.dimension_values[2].value,
+            'channel': row.dimension_values[3].value,
+            'sessions': int(float(row.metric_values[0].value)),
+            'bounce_rate': float(row.metric_values[1].value) * 100,
+            'avg_duration': float(row.metric_values[2].value),
+            'conversions': 0,
+        }
+
+    request_region_gender_cv = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[
+            Dimension(name="date"),
+            Dimension(name="region"),
+            Dimension(name="userGender"),
+            Dimension(name="sessionDefaultChannelGroup"),
+        ],
+        metrics=[Metric(name="eventCount")],
+        dimension_filter=PURCHASE_ADS_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    response_region_gender_cv = ga4_client.run_report(request_region_gender_cv)
+
+    for row in response_region_gender_cv.rows:
+        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value, row.dimension_values[3].value)
+        cv = int(float(row.metric_values[0].value))
+        if key in region_gender_map:
+            region_gender_map[key]['conversions'] = cv
+        else:
+            region_gender_map[key] = {
+                'date': row.dimension_values[0].value,
+                'region': region_to_ja(row.dimension_values[1].value or '(不明)'),
+                'gender': row.dimension_values[2].value,
+                'channel': row.dimension_values[3].value,
+                'sessions': 0,
+                'bounce_rate': 0,
+                'avg_duration': 0,
+                'conversions': cv,
+            }
+
+    ga4_region_gender_data = list(region_gender_map.values())
+    print(f"  ✓ {len(ga4_region_gender_data)} GA4 region/gender/date records found")
+
+except Exception as e:
+    print(f"  ✗ Region x gender breakdown error: {e}")
+    ga4_region_gender_data = []
 
 # ===== FETCH EVENT BREAKDOWN (ADS TRAFFIC ONLY) =====
 print("\n📣 Fetching event breakdown (ads traffic only)...")
@@ -975,14 +1121,14 @@ meta_native = bool(meta_ads_demo_data)
 if google_native:
     for item in google_ads_age_data:
         ad_age_gender_data.append({
-            'date': item['date'], 'platform': 'Google', 'source': '広告媒体',
+            'date': item['date'], 'platform': 'Google', 'source': '広告媒体', 'unit': item['campaign'],
             'age': AGE_LABELS.get(item['age'], item['age']), 'gender': '全体',
             'sessions': 0, 'spend': item['spend'], 'clicks': item['clicks'],
             'impressions': item['impressions'], 'conversions': item['conversions'],
         })
     for item in google_ads_gender_data:
         ad_age_gender_data.append({
-            'date': item['date'], 'platform': 'Google', 'source': '広告媒体',
+            'date': item['date'], 'platform': 'Google', 'source': '広告媒体', 'unit': item['campaign'],
             'age': '全体', 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
             'sessions': 0, 'spend': item['spend'], 'clicks': item['clicks'],
             'impressions': item['impressions'], 'conversions': item['conversions'],
@@ -992,7 +1138,7 @@ else:
         if item['channel'] != 'Paid Search':
             continue
         ad_age_gender_data.append({
-            'date': item['date'], 'platform': 'Google', 'source': 'GA4(参考値)',
+            'date': item['date'], 'platform': 'Google', 'source': 'GA4(参考値)', 'unit': '全体',
             'age': item['age'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
             'sessions': item['sessions'], 'spend': 0, 'clicks': 0,
             'impressions': 0, 'conversions': item['conversions'],
@@ -1001,7 +1147,7 @@ else:
 if meta_native:
     for item in meta_ads_demo_data:
         ad_age_gender_data.append({
-            'date': item['date'], 'platform': 'Meta', 'source': '広告媒体',
+            'date': item['date'], 'platform': 'Meta', 'source': '広告媒体', 'unit': item['ad_name'],
             'age': item['age'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
             'sessions': 0, 'spend': item['spend'], 'clicks': item['clicks'],
             'impressions': item['impressions'], 'conversions': item['purchases'],
@@ -1011,7 +1157,7 @@ else:
         if item['channel'] != 'Paid Social':
             continue
         ad_age_gender_data.append({
-            'date': item['date'], 'platform': 'Meta', 'source': 'GA4(参考値)',
+            'date': item['date'], 'platform': 'Meta', 'source': 'GA4(参考値)', 'unit': '全体',
             'age': item['age'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
             'sessions': item['sessions'], 'spend': 0, 'clicks': 0,
             'impressions': 0, 'conversions': item['conversions'],
@@ -1028,9 +1174,9 @@ try:
     ws_agegender = sheet.worksheet(sheet_name_agegender)
     ws_agegender.clear()
 except:
-    ws_agegender = sheet.add_worksheet(sheet_name_agegender, rows=6000, cols=11)
+    ws_agegender = sheet.add_worksheet(sheet_name_agegender, rows=6000, cols=12)
 
-rows_agegender = [['日付', '媒体', 'データソース', '年齢層', '性別', 'セッション数', '広告費(¥)', 'クリック数', '表示回数', 'CV数', '更新日時']]
+rows_agegender = [['日付', '媒体', 'データソース', 'キャンペーン/広告', '年齢層', '性別', 'セッション数', '広告費(¥)', 'クリック数', '表示回数', 'CV数', '更新日時']]
 
 for item in sorted(ad_age_gender_data, key=lambda x: x['date']):
     date_obj = datetime.strptime(item['date'], '%Y%m%d')
@@ -1038,6 +1184,7 @@ for item in sorted(ad_age_gender_data, key=lambda x: x['date']):
         date_obj.strftime('%Y-%m-%d'),
         item['platform'],
         item['source'],
+        item['unit'],
         item['age'],
         item['gender'],
         int(item['sessions']),
@@ -1077,6 +1224,71 @@ for item in sorted(region_data, key=lambda x: x['date']):
 
 ws_region.append_rows(rows_region)
 print(f"  ✓ {len(region_data)} rows written to GA4_地域別 sheet")
+
+# ===== MERGE REGION x GENDER DATA (Meta native + GA4 engagement) =====
+print("\n🗺️ Merging region x gender breakdown (ad platform native + GA4 engagement)...")
+
+ad_region_gender_data = []
+
+# Meta: native spend/click/impression/CV rows.
+for item in meta_ads_geo_data:
+    ad_region_gender_data.append({
+        'date': item['date'], 'platform': 'Meta', 'source': '広告媒体', 'unit': item['ad_name'],
+        'region': region_to_ja(item['region']), 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
+        'spend': item['spend'], 'clicks': item['clicks'], 'impressions': item['impressions'],
+        'conversions': item['purchases'], 'sessions': 0, 'bounce_rate': 0, 'avg_duration': 0,
+    })
+
+# GA4: engagement rows (bounce/duration/sessions) for both platforms, plus
+# the only source of Google's region x gender cut (no native Google Ads view).
+for item in ga4_region_gender_data:
+    platform = 'Google' if item['channel'] == 'Paid Search' else ('Meta' if item['channel'] == 'Paid Social' else None)
+    if not platform:
+        continue
+    ad_region_gender_data.append({
+        'date': item['date'], 'platform': platform, 'source': 'GA4', 'unit': '全体',
+        'region': item['region'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
+        'spend': 0, 'clicks': 0, 'impressions': 0,
+        'conversions': item['conversions'] if platform == 'Google' else 0,
+        'sessions': item['sessions'], 'bounce_rate': item['bounce_rate'], 'avg_duration': item['avg_duration'],
+    })
+
+print(f"  ✓ {len(ad_region_gender_data)} merged region/gender records "
+      f"({len(meta_ads_geo_data)} Meta native, {len(ga4_region_gender_data)} GA4 engagement)")
+
+# ===== CREATE/UPDATE REGION x GENDER BREAKDOWN SHEET =====
+print("\n💾 Updating region x gender breakdown sheet...")
+
+sheet_name_regiongender = '広告_エリア性別'
+try:
+    ws_regiongender = sheet.worksheet(sheet_name_regiongender)
+    ws_regiongender.clear()
+except:
+    ws_regiongender = sheet.add_worksheet(sheet_name_regiongender, rows=10000, cols=14)
+
+rows_regiongender = [['日付', '媒体', 'データソース', 'キャンペーン/広告', 'エリア', '性別', '広告費(¥)', 'クリック数', '表示回数', 'CV数', 'セッション数', '直帰率(%)', '平均滞在時間(秒)', '更新日時']]
+
+for item in sorted(ad_region_gender_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_regiongender.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['platform'],
+        item['source'],
+        item['unit'],
+        item['region'],
+        item['gender'],
+        round(item['spend'], 0),
+        int(item['clicks']),
+        int(item['impressions']),
+        round(item['conversions'], 2),
+        int(item['sessions']),
+        round(item['bounce_rate'], 1),
+        round(item['avg_duration'], 0),
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_regiongender.append_rows(rows_regiongender)
+print(f"  ✓ {len(ad_region_gender_data)} rows written to 広告_エリア性別 sheet")
 
 # ===== CREATE/UPDATE EVENT BREAKDOWN SHEET =====
 print("\n💾 Updating event breakdown sheet...")
