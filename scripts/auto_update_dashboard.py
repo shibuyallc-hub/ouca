@@ -363,44 +363,50 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
 
         print(f"  ✓ {len(meta_ads_demo_data)} age/gender records found")
 
-        # ----- Region/gender breakdown (per ad) -----
-        geo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
-        geo_params = {
-            'fields': 'ad_name,spend,clicks,impressions,actions',
-            'level': 'ad',
-            'breakdowns': 'region,gender',
-            'time_range': json.dumps({'since': since, 'until': until}),
-            'time_increment': 1,
-            'limit': 500,
-            'access_token': META_ACCESS_TOKEN,
-        }
+        # ----- Region/gender breakdown -----
+        # NOTE: level='ad' + breakdowns='region,gender' hits Meta's request
+        # complexity limit (too many possible ad x region x gender x day
+        # combinations) and returns 400. Keep this one at account level.
+        try:
+            geo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
+            geo_params = {
+                'fields': 'spend,clicks,impressions,actions',
+                'breakdowns': 'region,gender',
+                'time_range': json.dumps({'since': since, 'until': until}),
+                'time_increment': 1,
+                'limit': 500,
+                'access_token': META_ACCESS_TOKEN,
+            }
 
-        next_url = geo_url
-        next_params = geo_params
-        while next_url:
-            resp = requests.get(next_url, params=next_params, timeout=30)
-            resp.raise_for_status()
-            payload = resp.json()
+            next_url = geo_url
+            next_params = geo_params
+            while next_url:
+                resp = requests.get(next_url, params=next_params, timeout=30)
+                if not resp.ok:
+                    print(f"  ✗ Meta region/gender request failed: {resp.status_code} {resp.text[:500]}")
+                    break
+                payload = resp.json()
 
-            for row in payload.get('data', []):
-                purchases = 0
-                for action in row.get('actions', []):
-                    if action.get('action_type') in ('purchase', 'omni_purchase'):
-                        purchases += int(float(action.get('value', 0)))
+                for row in payload.get('data', []):
+                    purchases = 0
+                    for action in row.get('actions', []):
+                        if action.get('action_type') in ('purchase', 'omni_purchase'):
+                            purchases += int(float(action.get('value', 0)))
 
-                meta_ads_geo_data.append({
-                    'date': row['date_start'].replace('-', ''),
-                    'ad_name': row.get('ad_name', '(不明)'),
-                    'region': row.get('region', '(不明)'),
-                    'gender': row.get('gender', '(不明)'),
-                    'spend': float(row.get('spend', 0)),
-                    'clicks': int(row.get('clicks', 0)),
-                    'impressions': int(row.get('impressions', 0)),
-                    'purchases': purchases,
-                })
+                    meta_ads_geo_data.append({
+                        'date': row['date_start'].replace('-', ''),
+                        'region': row.get('region', '(不明)'),
+                        'gender': row.get('gender', '(不明)'),
+                        'spend': float(row.get('spend', 0)),
+                        'clicks': int(row.get('clicks', 0)),
+                        'impressions': int(row.get('impressions', 0)),
+                        'purchases': purchases,
+                    })
 
-            next_url = payload.get('paging', {}).get('next')
-            next_params = None
+                next_url = payload.get('paging', {}).get('next')
+                next_params = None
+        except Exception as e:
+            print(f"  ✗ Meta region/gender breakdown error: {e}")
 
         print(f"  ✓ {len(meta_ads_geo_data)} region/gender records found")
 
@@ -1230,10 +1236,10 @@ print("\n🗺️ Merging region x gender breakdown (ad platform native + GA4 eng
 
 ad_region_gender_data = []
 
-# Meta: native spend/click/impression/CV rows.
+# Meta: native spend/click/impression/CV rows (account level - see note above).
 for item in meta_ads_geo_data:
     ad_region_gender_data.append({
-        'date': item['date'], 'platform': 'Meta', 'source': '広告媒体', 'unit': item['ad_name'],
+        'date': item['date'], 'platform': 'Meta', 'source': '広告媒体', 'unit': '全体',
         'region': region_to_ja(item['region']), 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
         'spend': item['spend'], 'clicks': item['clicks'], 'impressions': item['impressions'],
         'conversions': item['purchases'], 'sessions': 0, 'bounce_rate': 0, 'avg_duration': 0,
