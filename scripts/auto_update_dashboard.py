@@ -363,19 +363,14 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
 
         print(f"  ✓ {len(meta_ads_demo_data)} age/gender records found")
 
-        # ----- Region/gender breakdown -----
-        # NOTE: level='ad' + breakdowns='region,gender' hits Meta's request
-        # complexity limit (too many possible ad x region x gender x day
-        # combinations) and returns 400 - keep this one at account level.
-        # Also, Meta rejects breakdowns=region,gender when the 'actions'
-        # field is requested too ("combination of data breakdown columns
-        # (action_type, gender, region) is invalid") - so purchases aren't
-        # available on this cut; CV for Meta rows here is always 0.
+        # ----- Region breakdown (no gender - Meta rejects region+gender combined,
+        # error: "combination of data breakdown columns (action_type, gender,
+        # region) is invalid", regardless of which fields are requested).
         try:
             geo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
             geo_params = {
                 'fields': 'spend,clicks,impressions',
-                'breakdowns': 'region,gender',
+                'breakdowns': 'region',
                 'time_range': json.dumps({'since': since, 'until': until}),
                 'time_increment': 1,
                 'limit': 500,
@@ -387,7 +382,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
             while next_url:
                 resp = requests.get(next_url, params=next_params, timeout=30)
                 if not resp.ok:
-                    print(f"  ✗ Meta region/gender request failed: {resp.status_code} {resp.text[:500]}")
+                    print(f"  ✗ Meta region request failed: {resp.status_code} {resp.text[:500]}")
                     break
                 payload = resp.json()
 
@@ -395,7 +390,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
                     meta_ads_geo_data.append({
                         'date': row['date_start'].replace('-', ''),
                         'region': row.get('region', '(不明)'),
-                        'gender': row.get('gender', '(不明)'),
+                        'gender': '全体',
                         'spend': float(row.get('spend', 0)),
                         'clicks': int(row.get('clicks', 0)),
                         'impressions': int(row.get('impressions', 0)),
@@ -405,9 +400,9 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
                 next_url = payload.get('paging', {}).get('next')
                 next_params = None
         except Exception as e:
-            print(f"  ✗ Meta region/gender breakdown error: {e}")
+            print(f"  ✗ Meta region breakdown error: {e}")
 
-        print(f"  ✓ {len(meta_ads_geo_data)} region/gender records found")
+        print(f"  ✓ {len(meta_ads_geo_data)} region records found")
 
     except Exception as e:
         print(f"  ✗ Meta Ads API error: {e}")
