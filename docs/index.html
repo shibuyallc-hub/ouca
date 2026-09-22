@@ -121,6 +121,7 @@
         <button class="sheet-tab" onclick="switchSheet('traffic')">🌐 流入・PV</button>
         <button class="sheet-tab" onclick="switchSheet('product')">🛍️ 商品別</button>
         <button class="sheet-tab" onclick="switchSheet('detail')">🔎 詳細分析</button>
+        <button class="sheet-tab" onclick="switchSheet('weekly')">📅 週次レポート</button>
       </div>
       <div class="daterange" id="globalRange">
         <button type="button" class="daterange-btn">📅 <span class="daterange-label">過去30日間</span> ▾</button>
@@ -523,6 +524,72 @@
         </table>
       </div>
     </div>
+
+    <div id="weekly" class="sheet-content">
+      <div class="controls">
+        <div class="control-group">
+          <label>📅 対象週</label>
+          <select id="weeklySelector"></select>
+        </div>
+      </div>
+
+      <div id="weeklyEmpty" style="display:none;padding:40px;text-align:center;color:#868e96;">
+        週次レポートはまだ生成されていません（毎週月曜に自動生成されます）。
+      </div>
+
+      <div id="weeklyContent" style="display:none;">
+        <p style="margin-bottom:15px;font-size:13px;color:#495057;" id="weeklyRangeLabel"></p>
+
+        <div class="summary" style="grid-template-columns: repeat(4, 1fr); border-bottom:none;">
+          <div class="kpi-card">
+            <div class="kpi-label">総広告費</div>
+            <div class="kpi-value" id="wkSpend">¥0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">総CV数</div>
+            <div class="kpi-value" id="wkCV">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">ROAS</div>
+            <div class="kpi-value" id="wkRoas">0倍</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">CPA</div>
+            <div class="kpi-value" id="wkCpa">¥0</div>
+          </div>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">📊 媒体別内訳</h2>
+          <table>
+            <thead>
+              <tr><th>媒体</th><th>広告費(¥)</th><th>CV数</th></tr>
+            </thead>
+            <tbody id="wkPlatformTable"></tbody>
+          </table>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">✅ GOOD</h2>
+          <ul id="wkGood" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">⚠️ BAD</h2>
+          <ul id="wkBad" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">💡 改善ポイント</h2>
+          <ul id="wkImprove" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">🛠️ 今週の運用変更履歴</h2>
+          <ul id="wkChanges" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -538,6 +605,7 @@
     let allRegionData = [];
     let allEventData = [];
     let allRegionGenderData = [];
+    let allWeeklyReportData = [];
 
     // NOTE: these must stay declared before checkLogin()/the auto-login
     // block below, since a returning visitor with a valid session runs
@@ -828,7 +896,7 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
@@ -839,6 +907,7 @@
           fetch(sheetCsvUrl('GA4_地域別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('GA4_イベント別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('広告_エリア性別')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('週次レポート_アーカイブ')).then(r => r.text()).catch(() => ''),
         ]);
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
@@ -850,6 +919,7 @@
         allRegionData = parseCSV(regionCsv);
         allEventData = parseCSV(eventCsv);
         allRegionGenderData = parseCSV(regionGenderCsv);
+        allWeeklyReportData = parseCSV(weeklyCsv);
 
         renderAdsTab();
         renderTrafficTab();
@@ -857,6 +927,7 @@
         renderGoogleCampaignTab();
         renderMetaAdTab();
         renderDetailTab();
+        renderWeeklyTab();
 
         document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ja-JP');
         showStatus('✓ データを取得しました', 'success');
@@ -1194,6 +1265,73 @@
         tr.innerHTML = `<td>${name}</td><td>${formatNumber(count)}</td>`;
         tbody.appendChild(tr);
       });
+    }
+
+    // ===================== WEEKLY REPORT TAB =====================
+    let weeklySelectorInitialized = false;
+
+    function renderWeeklyTab() {
+      const selector = document.getElementById('weeklySelector');
+      const empty = document.getElementById('weeklyEmpty');
+      const content = document.getElementById('weeklyContent');
+
+      if (allWeeklyReportData.length === 0) {
+        empty.style.display = 'block';
+        content.style.display = 'none';
+        return;
+      }
+
+      const sorted = [...allWeeklyReportData].sort((a, b) => (a['週開始日'] < b['週開始日'] ? 1 : -1));
+
+      if (!weeklySelectorInitialized) {
+        selector.innerHTML = '';
+        sorted.forEach(row => {
+          const opt = document.createElement('option');
+          opt.value = row['週開始日'];
+          opt.textContent = `${row['週開始日']} 〜 ${row['週終了日']}`;
+          selector.appendChild(opt);
+        });
+        selector.addEventListener('change', renderWeeklyTab);
+        weeklySelectorInitialized = true;
+      }
+
+      const selectedStart = selector.value || sorted[0]['週開始日'];
+      const week = sorted.find(row => row['週開始日'] === selectedStart) || sorted[0];
+
+      empty.style.display = 'none';
+      content.style.display = 'block';
+
+      document.getElementById('weeklyRangeLabel').textContent = `対象週: ${week['週開始日']} 〜 ${week['週終了日']}（生成日時: ${week['生成日時'] || '-'}）`;
+      document.getElementById('wkSpend').textContent = '¥' + formatNumber(parseFloat(week['総広告費(¥)']) || 0);
+      document.getElementById('wkCV').textContent = formatNumber(parseFloat(week['総CV数']) || 0);
+      document.getElementById('wkRoas').textContent = (parseFloat(week['ROAS']) || 0).toFixed(2) + '倍';
+      document.getElementById('wkCpa').textContent = '¥' + formatNumber(parseFloat(week['CPA(¥)']) || 0);
+
+      const platformTbody = document.getElementById('wkPlatformTable');
+      platformTbody.innerHTML = `
+        <tr><td>Google</td><td>¥${formatNumber(parseFloat(week['Google広告費(¥)']) || 0)}</td><td>${formatNumber(parseFloat(week['Google CV数']) || 0)}</td></tr>
+        <tr><td>Meta</td><td>¥${formatNumber(parseFloat(week['Meta広告費(¥)']) || 0)}</td><td>${formatNumber(parseFloat(week['Meta CV数']) || 0)}</td></tr>
+      `;
+
+      const fillList = (elId, text) => {
+        const el = document.getElementById(elId);
+        el.innerHTML = '';
+        const items = (text || '').split(' ｜ ').map(s => s.trim()).filter(Boolean);
+        if (items.length === 0) {
+          el.innerHTML = '<li>データがありません</li>';
+          return;
+        }
+        items.forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = item;
+          el.appendChild(li);
+        });
+      };
+
+      fillList('wkGood', week['GOOD']);
+      fillList('wkBad', week['BAD']);
+      fillList('wkImprove', week['改善ポイント']);
+      fillList('wkChanges', week['運用変更履歴']);
     }
 
     // ===================== TRAFFIC TAB =====================

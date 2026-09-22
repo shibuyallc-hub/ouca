@@ -1,0 +1,40 @@
+name: Weekly Report
+
+on:
+  schedule:
+    # 毎週月曜 日本時間9時 (UTC 0時)
+    - cron: '0 0 * * 1'
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install google-auth-oauthlib google-auth-httplib2
+          pip install gspread
+
+      - name: Create Service Account JSON
+        run: |
+          echo '${{ secrets.SERVICE_ACCOUNT_JSON }}' > service_account.json
+
+      - name: Run weekly report script
+        env:
+          SERVICE_ACCOUNT_JSON_PATH: service_account.json
+        run: |
+          python scripts/weekly_report.py
+
+      - name: Clean up secrets
+        if: always()
+        run: rm -f service_account.json
