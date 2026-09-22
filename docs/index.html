@@ -588,6 +588,17 @@
           <h2 style="margin-bottom: 15px;">🛠️ 今週の運用変更履歴</h2>
           <ul id="wkChanges" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
         </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">📝 改善メモ・顧客との会話ログ</h2>
+          <ul id="wkMemoList" style="margin:0 0 15px 0;padding-left:20px;line-height:1.9;"></ul>
+          <textarea id="wkMemoInput" rows="3" style="width:100%;padding:10px;border:1px solid #dee2e6;border-radius:6px;font-family:inherit;font-size:14px;box-sizing:border-box;" placeholder="今週の改善ポイントや顧客との会話内容をメモできます"></textarea>
+          <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="wkMemoAuthor" placeholder="記録者名（任意）" style="padding:8px;border:1px solid #dee2e6;border-radius:6px;font-size:13px;">
+            <button class="btn-update" style="width:auto;padding:10px 24px;" onclick="saveWeeklyMemo()">💾 メモを保存</button>
+            <span id="wkMemoStatus" style="font-size:13px;color:#868e96;"></span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -595,6 +606,8 @@
   <script>
     const SITE_PASSWORD = 'ouca2026';
     const SHEET_ID = '1eQb2soZQkat4jVhcUMyWx6hOCEZC8uOCdQc6UHcm-vM';
+    const MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbx5FNMgGW4kbpf6tSY_pvNAdb1FC8Q4N-WaiHQwHyKkYHh9sHUiw5lHFH2fVvETHeAdYQ/exec';
+    const MEMO_API_SECRET = 'n-igBRgVVUu1wTzomO0-6hIqyitlN5AO';
     let allAdsData = [];
     let allTrafficData = [];
     let allProductData = [];
@@ -606,6 +619,7 @@
     let allEventData = [];
     let allRegionGenderData = [];
     let allWeeklyReportData = [];
+    let allMemoData = [];
 
     // NOTE: these must stay declared before checkLogin()/the auto-login
     // block below, since a returning visitor with a valid session runs
@@ -896,7 +910,7 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
@@ -908,6 +922,7 @@
           fetch(sheetCsvUrl('GA4_イベント別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('広告_エリア性別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('週次レポート_アーカイブ')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('改善メモ')).then(r => r.text()).catch(() => ''),
         ]);
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
@@ -920,6 +935,7 @@
         allEventData = parseCSV(eventCsv);
         allRegionGenderData = parseCSV(regionGenderCsv);
         allWeeklyReportData = parseCSV(weeklyCsv);
+        allMemoData = parseCSV(memoCsv);
 
         renderAdsTab();
         renderTrafficTab();
@@ -1332,6 +1348,75 @@
       fillList('wkBad', week['BAD']);
       fillList('wkImprove', week['改善ポイント']);
       fillList('wkChanges', week['運用変更履歴']);
+      renderMemoList(selectedStart);
+    }
+
+    function renderMemoList(weekStart) {
+      const list = document.getElementById('wkMemoList');
+      const memos = allMemoData
+        .filter(row => row['対象週開始日'] === weekStart)
+        .sort((a, b) => (a['記録日時'] < b['記録日時'] ? 1 : -1));
+
+      list.innerHTML = '';
+      if (memos.length === 0) {
+        list.innerHTML = '<li style="color:#868e96;">この週のメモはまだありません。</li>';
+        return;
+      }
+      memos.forEach(memo => {
+        const li = document.createElement('li');
+        const author = memo['記録者'] ? `（${memo['記録者']}）` : '';
+        li.textContent = `[${memo['記録日時']}]${author} ${memo['内容']}`;
+        list.appendChild(li);
+      });
+    }
+
+    async function saveWeeklyMemo() {
+      const selector = document.getElementById('weeklySelector');
+      const weekStart = selector.value;
+      const textarea = document.getElementById('wkMemoInput');
+      const authorInput = document.getElementById('wkMemoAuthor');
+      const statusEl = document.getElementById('wkMemoStatus');
+      const content = textarea.value.trim();
+
+      if (!weekStart) return;
+      if (!content) {
+        statusEl.textContent = 'メモを入力してください';
+        statusEl.style.color = '#e03131';
+        return;
+      }
+
+      statusEl.textContent = '保存中...';
+      statusEl.style.color = '#868e96';
+
+      try {
+        const resp = await fetch(MEMO_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            secret: MEMO_API_SECRET,
+            weekStart: weekStart,
+            content: content,
+            author: authorInput.value.trim(),
+          }),
+        });
+        const result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'unknown error');
+
+        allMemoData.push({
+          '記録日時': new Date().toLocaleString('ja-JP'),
+          '対象週開始日': weekStart,
+          '内容': content,
+          '記録者': authorInput.value.trim(),
+        });
+        renderMemoList(weekStart);
+        textarea.value = '';
+        statusEl.textContent = '✓ 保存しました';
+        statusEl.style.color = '#2e7d32';
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = '✗ 保存に失敗しました';
+        statusEl.style.color = '#e03131';
+      }
     }
 
     // ===================== TRAFFIC TAB =====================
