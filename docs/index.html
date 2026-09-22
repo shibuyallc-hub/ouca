@@ -434,20 +434,22 @@
       <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※このタブは広告経由（Google広告・Meta広告）のアクセスのみを対象にした分析です。選択期間はページ上部の日付範囲に連動します。</p>
 
       <div class="data-table">
-        <h2 style="margin-bottom: 15px;">👥 年齢層×性別（選択期間・広告経由のみ）</h2>
+        <h2 style="margin-bottom: 5px;">👥 年齢層×性別（選択期間・広告経由のみ）</h2>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※基本は各広告媒体自身の計測データです。媒体側で年齢・性別が取得できない場合（例：Google Performance Maxは非対応）はGA4の参考値で代用しています。データソース列で判別できます。</p>
         <table>
           <thead>
             <tr>
+              <th>媒体</th>
+              <th>データソース</th>
               <th>年齢層</th>
               <th>性別</th>
-              <th>セッション数</th>
-              <th>直帰率</th>
-              <th>平均滞在時間</th>
+              <th>広告費(¥)</th>
+              <th>クリック数/セッション数</th>
               <th>CV数</th>
             </tr>
           </thead>
           <tbody id="ageGenderTable">
-            <tr><td colspan="6" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+            <tr><td colspan="7" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -796,7 +798,7 @@
           fetch(sheetCsvUrl('ページ別行動')).then(r => r.text()),
           fetch(sheetCsvUrl('Google_キャンペーン別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('Meta_広告別')).then(r => r.text()).catch(() => ''),
-          fetch(sheetCsvUrl('GA4_年齢性別')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('広告_年齢性別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('GA4_地域別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('GA4_イベント別')).then(r => r.text()).catch(() => ''),
         ]);
@@ -1004,29 +1006,33 @@
 
       const byKey = {};
       filtered.forEach(row => {
-        const key = (row['年齢層'] || '(不明)') + '|||' + (row['性別'] || '(不明)');
+        const platform = row['媒体'] || '(不明)';
+        const source = row['データソース'] || '(不明)';
+        const key = [platform, source, row['年齢層'] || '(不明)', row['性別'] || '(不明)'].join('|||');
         if (!byKey[key]) {
-          byKey[key] = { age: row['年齢層'] || '(不明)', gender: row['性別'] || '(不明)', sessions: 0, durationWeighted: 0, bounceWeighted: 0, cv: 0 };
+          byKey[key] = {
+            platform, source,
+            age: row['年齢層'] || '(不明)', gender: row['性別'] || '(不明)',
+            sessions: 0, spend: 0, clicks: 0, cv: 0,
+          };
         }
-        const sessions = parseFloat(row['セッション数']) || 0;
-        byKey[key].sessions += sessions;
-        byKey[key].durationWeighted += (parseFloat(row['平均滞在時間(秒)']) || 0) * sessions;
-        byKey[key].bounceWeighted += (parseFloat(row['直帰率(%)']) || 0) * sessions;
+        byKey[key].sessions += parseFloat(row['セッション数']) || 0;
+        byKey[key].spend += parseFloat(row['広告費(¥)']) || 0;
+        byKey[key].clicks += parseFloat(row['クリック数']) || 0;
         byKey[key].cv += parseFloat(row['CV数']) || 0;
       });
 
-      const rows = Object.values(byKey).sort((a, b) => b.sessions - a.sessions);
+      const rows = Object.values(byKey).sort((a, b) => (b.spend + b.sessions) - (a.spend + a.sessions));
 
       tbody.innerHTML = '';
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
         return;
       }
       rows.forEach(agg => {
-        const avgDuration = agg.sessions > 0 ? agg.durationWeighted / agg.sessions : 0;
-        const avgBounce = agg.sessions > 0 ? agg.bounceWeighted / agg.sessions : 0;
+        const clicksOrSessions = agg.source === '広告媒体' ? formatNumber(agg.clicks) : formatNumber(agg.sessions);
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${agg.age}</td><td>${agg.gender}</td><td>${formatNumber(agg.sessions)}</td><td>${avgBounce.toFixed(1)}%</td><td>${formatDuration(avgDuration)}</td><td>${formatNumber(agg.cv)}</td>`;
+        tr.innerHTML = `<td>${agg.platform}</td><td>${agg.source}</td><td>${agg.age}</td><td>${agg.gender}</td><td>¥${formatNumber(agg.spend)}</td><td>${clicksOrSessions}</td><td>${formatNumber(agg.cv)}</td>`;
         tbody.appendChild(tr);
       });
     }

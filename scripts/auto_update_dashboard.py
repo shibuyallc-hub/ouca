@@ -114,6 +114,8 @@ print("\n💰 Fetching Google Ads spend data...")
 
 google_ads_daily = {}
 google_ads_campaign_data = []
+google_ads_age_data = []
+google_ads_gender_data = []
 
 if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET,
         GOOGLE_ADS_REFRESH_TOKEN, GOOGLE_ADS_CUSTOMER_ID]):
@@ -173,6 +175,45 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
 
         print(f"  ✓ {len(google_ads_campaign_data)} campaign/date records found")
 
+        # ----- Age/gender breakdown (not supported for Performance Max) -----
+        gaql_age = f"""
+            SELECT segments.date, ad_group_criterion.age_range.type,
+                   metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
+            FROM age_range_view
+            WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
+        """
+        age_stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_age)
+        for batch in age_stream:
+            for row in batch.results:
+                google_ads_age_data.append({
+                    'date': row.segments.date.replace('-', ''),
+                    'age': row.ad_group_criterion.age_range.type_.name,
+                    'spend': row.metrics.cost_micros / 1_000_000,
+                    'clicks': row.metrics.clicks,
+                    'impressions': row.metrics.impressions,
+                    'conversions': row.metrics.conversions,
+                })
+
+        gaql_gender = f"""
+            SELECT segments.date, ad_group_criterion.gender.type,
+                   metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
+            FROM gender_view
+            WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
+        """
+        gender_stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_gender)
+        for batch in gender_stream:
+            for row in batch.results:
+                google_ads_gender_data.append({
+                    'date': row.segments.date.replace('-', ''),
+                    'gender': row.ad_group_criterion.gender.type_.name,
+                    'spend': row.metrics.cost_micros / 1_000_000,
+                    'clicks': row.metrics.clicks,
+                    'impressions': row.metrics.impressions,
+                    'conversions': row.metrics.conversions,
+                })
+
+        print(f"  ✓ {len(google_ads_age_data)} age records / {len(google_ads_gender_data)} gender records found (Performance Max campaigns won't report here)")
+
     except Exception as e:
         print(f"  ✗ Google Ads API error: {e}")
 else:
@@ -183,6 +224,7 @@ print("\n💰 Fetching Meta Ads spend data...")
 
 meta_ads_daily = {}
 meta_ads_ad_data = []
+meta_ads_demo_data = []
 
 if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
     try:
@@ -254,6 +296,45 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
             next_params = None
 
         print(f"  ✓ {len(meta_ads_ad_data)} ad/date records found")
+
+        # ----- Age/gender breakdown -----
+        demo_url = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
+        demo_params = {
+            'fields': 'spend,clicks,impressions,actions',
+            'breakdowns': 'age,gender',
+            'time_range': json.dumps({'since': since, 'until': until}),
+            'time_increment': 1,
+            'limit': 500,
+            'access_token': META_ACCESS_TOKEN,
+        }
+
+        next_url = demo_url
+        next_params = demo_params
+        while next_url:
+            resp = requests.get(next_url, params=next_params, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+
+            for row in payload.get('data', []):
+                purchases = 0
+                for action in row.get('actions', []):
+                    if action.get('action_type') in ('purchase', 'omni_purchase'):
+                        purchases += int(float(action.get('value', 0)))
+
+                meta_ads_demo_data.append({
+                    'date': row['date_start'].replace('-', ''),
+                    'age': row.get('age', '(不明)'),
+                    'gender': row.get('gender', '(不明)'),
+                    'spend': float(row.get('spend', 0)),
+                    'clicks': int(row.get('clicks', 0)),
+                    'impressions': int(row.get('impressions', 0)),
+                    'purchases': purchases,
+                })
+
+            next_url = payload.get('paging', {}).get('next')
+            next_params = None
+
+        print(f"  ✓ {len(meta_ads_demo_data)} age/gender records found")
 
     except Exception as e:
         print(f"  ✗ Meta Ads API error: {e}")
@@ -448,8 +529,11 @@ except Exception as e:
     print(f"  ✗ Product data error: {e}")
     product_data = []
 
-# ===== FETCH AGE/GENDER BREAKDOWN (ADS TRAFFIC ONLY) =====
-print("\n👥 Fetching age/gender breakdown (ads traffic only)...")
+# ===== FETCH AGE/GENDER BREAKDOWN (GA4 FALLBACK, ADS TRAFFIC ONLY) =====
+# This is only used as a fallback per platform when that platform's own ad
+# API doesn't return demographic data (e.g. Google Ads age_range_view /
+# gender_view don't support Performance Max campaigns).
+print("\n👥 Fetching age/gender breakdown from GA4 (fallback, ads traffic only)...")
 
 try:
     request_age_gender = RunReportRequest(
@@ -458,6 +542,7 @@ try:
             Dimension(name="date"),
             Dimension(name="userAgeBracket"),
             Dimension(name="userGender"),
+            Dimension(name="sessionDefaultChannelGroup"),
         ],
         metrics=[
             Metric(name="sessions"),
@@ -471,11 +556,12 @@ try:
     age_gender_map = {}
 
     for row in response_age_gender.rows:
-        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value)
+        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value, row.dimension_values[3].value)
         age_gender_map[key] = {
             'date': row.dimension_values[0].value,
             'age': row.dimension_values[1].value,
             'gender': row.dimension_values[2].value,
+            'channel': row.dimension_values[3].value,
             'sessions': int(float(row.metric_values[0].value)),
             'bounce_rate': float(row.metric_values[1].value) * 100,
             'avg_duration': float(row.metric_values[2].value),
@@ -488,6 +574,7 @@ try:
             Dimension(name="date"),
             Dimension(name="userAgeBracket"),
             Dimension(name="userGender"),
+            Dimension(name="sessionDefaultChannelGroup"),
         ],
         metrics=[Metric(name="eventCount")],
         dimension_filter=PURCHASE_ADS_FILTER,
@@ -496,7 +583,7 @@ try:
     response_age_gender_cv = ga4_client.run_report(request_age_gender_cv)
 
     for row in response_age_gender_cv.rows:
-        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value)
+        key = (row.dimension_values[0].value, row.dimension_values[1].value, row.dimension_values[2].value, row.dimension_values[3].value)
         cv = int(float(row.metric_values[0].value))
         if key in age_gender_map:
             age_gender_map[key]['conversions'] = cv
@@ -505,18 +592,19 @@ try:
                 'date': row.dimension_values[0].value,
                 'age': row.dimension_values[1].value,
                 'gender': row.dimension_values[2].value,
+                'channel': row.dimension_values[3].value,
                 'sessions': 0,
                 'bounce_rate': 0,
                 'avg_duration': 0,
                 'conversions': cv,
             }
 
-    age_gender_data = list(age_gender_map.values())
-    print(f"  ✓ {len(age_gender_data)} age/gender/date records found")
+    ga4_age_gender_data = list(age_gender_map.values())
+    print(f"  ✓ {len(ga4_age_gender_data)} GA4 age/gender/date records found (fallback pool)")
 
 except Exception as e:
-    print(f"  ✗ Age/gender breakdown error: {e}")
-    age_gender_data = []
+    print(f"  ✗ GA4 age/gender fallback error: {e}")
+    ga4_age_gender_data = []
 
 # ===== FETCH REGION BREAKDOWN (ADS TRAFFIC ONLY) =====
 print("\n🗺️ Fetching region breakdown (ads traffic only)...")
@@ -867,33 +955,101 @@ for item in sorted(meta_ads_ad_data, key=lambda x: x['date']):
 ws_mad.append_rows(rows_mad)
 print(f"  ✓ {len(meta_ads_ad_data)} rows written to Meta_広告別 sheet")
 
+# ===== MERGE AGE/GENDER DATA (ad platform native, GA4 fallback per platform) =====
+print("\n👥 Merging age/gender breakdown (ad platform native + GA4 fallback)...")
+
+AGE_LABELS = {
+    'AGE_RANGE_18_24': '18-24', 'AGE_RANGE_25_34': '25-34', 'AGE_RANGE_35_44': '35-44',
+    'AGE_RANGE_45_54': '45-54', 'AGE_RANGE_55_64': '55-64', 'AGE_RANGE_65_UP': '65+',
+    'AGE_RANGE_UNDETERMINED': '不明', 'UNSPECIFIED': '不明', 'UNKNOWN': '不明',
+}
+GENDER_LABELS = {
+    'MALE': '男性', 'FEMALE': '女性', 'UNDETERMINED': '不明', 'UNSPECIFIED': '不明', 'UNKNOWN': '不明',
+    'male': '男性', 'female': '女性', 'unknown': '不明',
+}
+
+ad_age_gender_data = []
+google_native = bool(google_ads_age_data or google_ads_gender_data)
+meta_native = bool(meta_ads_demo_data)
+
+if google_native:
+    for item in google_ads_age_data:
+        ad_age_gender_data.append({
+            'date': item['date'], 'platform': 'Google', 'source': '広告媒体',
+            'age': AGE_LABELS.get(item['age'], item['age']), 'gender': '全体',
+            'sessions': 0, 'spend': item['spend'], 'clicks': item['clicks'],
+            'impressions': item['impressions'], 'conversions': item['conversions'],
+        })
+    for item in google_ads_gender_data:
+        ad_age_gender_data.append({
+            'date': item['date'], 'platform': 'Google', 'source': '広告媒体',
+            'age': '全体', 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
+            'sessions': 0, 'spend': item['spend'], 'clicks': item['clicks'],
+            'impressions': item['impressions'], 'conversions': item['conversions'],
+        })
+else:
+    for item in ga4_age_gender_data:
+        if item['channel'] != 'Paid Search':
+            continue
+        ad_age_gender_data.append({
+            'date': item['date'], 'platform': 'Google', 'source': 'GA4(参考値)',
+            'age': item['age'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
+            'sessions': item['sessions'], 'spend': 0, 'clicks': 0,
+            'impressions': 0, 'conversions': item['conversions'],
+        })
+
+if meta_native:
+    for item in meta_ads_demo_data:
+        ad_age_gender_data.append({
+            'date': item['date'], 'platform': 'Meta', 'source': '広告媒体',
+            'age': item['age'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
+            'sessions': 0, 'spend': item['spend'], 'clicks': item['clicks'],
+            'impressions': item['impressions'], 'conversions': item['purchases'],
+        })
+else:
+    for item in ga4_age_gender_data:
+        if item['channel'] != 'Paid Social':
+            continue
+        ad_age_gender_data.append({
+            'date': item['date'], 'platform': 'Meta', 'source': 'GA4(参考値)',
+            'age': item['age'], 'gender': GENDER_LABELS.get(item['gender'], item['gender']),
+            'sessions': item['sessions'], 'spend': 0, 'clicks': 0,
+            'impressions': 0, 'conversions': item['conversions'],
+        })
+
+print(f"  ✓ {len(ad_age_gender_data)} merged age/gender records "
+      f"(Google: {'広告媒体' if google_native else 'GA4(参考値)'}, Meta: {'広告媒体' if meta_native else 'GA4(参考値)'})")
+
 # ===== CREATE/UPDATE AGE/GENDER BREAKDOWN SHEET =====
 print("\n💾 Updating age/gender breakdown sheet...")
 
-sheet_name_agegender = 'GA4_年齢性別'
+sheet_name_agegender = '広告_年齢性別'
 try:
     ws_agegender = sheet.worksheet(sheet_name_agegender)
     ws_agegender.clear()
 except:
-    ws_agegender = sheet.add_worksheet(sheet_name_agegender, rows=6000, cols=8)
+    ws_agegender = sheet.add_worksheet(sheet_name_agegender, rows=6000, cols=11)
 
-rows_agegender = [['日付', '年齢層', '性別', 'セッション数', '直帰率(%)', '平均滞在時間(秒)', 'CV数', '更新日時']]
+rows_agegender = [['日付', '媒体', 'データソース', '年齢層', '性別', 'セッション数', '広告費(¥)', 'クリック数', '表示回数', 'CV数', '更新日時']]
 
-for item in sorted(age_gender_data, key=lambda x: x['date']):
+for item in sorted(ad_age_gender_data, key=lambda x: x['date']):
     date_obj = datetime.strptime(item['date'], '%Y%m%d')
     rows_agegender.append([
         date_obj.strftime('%Y-%m-%d'),
+        item['platform'],
+        item['source'],
         item['age'],
         item['gender'],
-        item['sessions'],
-        round(item['bounce_rate'], 1),
-        round(item['avg_duration'], 0),
-        item['conversions'],
+        int(item['sessions']),
+        round(item['spend'], 0),
+        int(item['clicks']),
+        int(item['impressions']),
+        round(item['conversions'], 2),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ])
 
 ws_agegender.append_rows(rows_agegender)
-print(f"  ✓ {len(age_gender_data)} rows written to GA4_年齢性別 sheet")
+print(f"  ✓ {len(ad_age_gender_data)} rows written to 広告_年齢性別 sheet")
 
 # ===== CREATE/UPDATE REGION BREAKDOWN SHEET =====
 print("\n💾 Updating region breakdown sheet...")
