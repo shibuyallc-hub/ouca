@@ -57,8 +57,18 @@ REGION_JA = {
 }
 
 
+_MACRON_MAP = str.maketrans('āĀēĒīĪōŌūŪ', 'aAeEiIoOuU')
+
+
 def region_to_ja(name):
-    return REGION_JA.get(name, name)
+    if name in REGION_JA:
+        return REGION_JA[name]
+    # Meta's region breakdown returns e.g. "Hyōgo Prefecture" - GA4 returns
+    # plain "Hyogo". Normalize both to the same lookup key.
+    normalized = name.translate(_MACRON_MAP)
+    if normalized.endswith(' Prefecture'):
+        normalized = normalized[:-len(' Prefecture')]
+    return REGION_JA.get(normalized, name)
 
 # ===== CONFIGURATION =====
 SERVICE_ACCOUNT_JSON_PATH = os.getenv('SERVICE_ACCOUNT_JSON_PATH', 'service_account.json')
