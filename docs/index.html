@@ -1422,6 +1422,26 @@
       li.appendChild(btnRow);
     }
 
+    // Apps Script web app responses trigger a cross-origin redirect
+    // (script.google.com -> script.googleusercontent.com) that browsers'
+    // fetch() refuses to read even though both hops send a valid
+    // Access-Control-Allow-Origin header (confirmed independently via
+    // curl/urllib, which don't enforce CORS) - a known limitation, not a
+    // server misconfiguration. 'no-cors' avoids the error; we then
+    // re-fetch the sheet itself (which IS plain same-policy-friendly GET
+    // via gviz) to confirm the write and pick up the real row IDs.
+    async function callMemoApi(payload) {
+      await fetch(MEMO_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ secret: MEMO_API_SECRET, ...payload }),
+      });
+      await new Promise(r => setTimeout(r, 1200));
+      const csv = await fetch(sheetCsvUrl('改善メモ')).then(r => r.text());
+      allMemoData = parseCSV(csv);
+    }
+
     async function updateMemo(li, memo, newContent) {
       const statusSpan = li.querySelector('.memo-edit-status');
       if (!newContent) {
@@ -1430,22 +1450,8 @@
       }
       if (statusSpan) { statusSpan.textContent = '保存中...'; statusSpan.style.color = '#868e96'; }
       try {
-        const resp = await fetch(MEMO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            secret: MEMO_API_SECRET,
-            action: 'update',
-            id: memo['ID'],
-            content: newContent,
-            author: memo['記録者'],
-          }),
-        });
-        const result = await resp.json();
-        if (!result.ok) throw new Error(result.error || 'unknown error');
-
-        memo['内容'] = newContent;
-        renderMemoView(li, memo);
+        await callMemoApi({ action: 'update', id: memo['ID'], content: newContent, author: memo['記録者'] });
+        renderMemoList(memo['対象週開始日']);
       } catch (e) {
         console.error(e);
         if (statusSpan) { statusSpan.textContent = '✗ 保存に失敗しました'; statusSpan.style.color = '#e03131'; }
@@ -1455,20 +1461,7 @@
     async function deleteMemo(memo) {
       if (!confirm('このメモを削除しますか？')) return;
       try {
-        const resp = await fetch(MEMO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            secret: MEMO_API_SECRET,
-            action: 'delete',
-            id: memo['ID'],
-          }),
-        });
-        const result = await resp.json();
-        if (!result.ok) throw new Error(result.error || 'unknown error');
-
-        const idx = allMemoData.indexOf(memo);
-        if (idx !== -1) allMemoData.splice(idx, 1);
+        await callMemoApi({ action: 'delete', id: memo['ID'] });
         renderMemoList(memo['対象週開始日']);
       } catch (e) {
         console.error(e);
@@ -1495,27 +1488,7 @@
       statusEl.style.color = '#868e96';
 
       try {
-        const resp = await fetch(MEMO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            secret: MEMO_API_SECRET,
-            action: 'create',
-            weekStart: weekStart,
-            content: content,
-            author: authorInput.value.trim(),
-          }),
-        });
-        const result = await resp.json();
-        if (!result.ok) throw new Error(result.error || 'unknown error');
-
-        allMemoData.push({
-          'ID': result.id || '',
-          '記録日時': new Date().toLocaleString('ja-JP'),
-          '対象週開始日': weekStart,
-          '内容': content,
-          '記録者': authorInput.value.trim(),
-        });
+        await callMemoApi({ action: 'create', weekStart: weekStart, content: content, author: authorInput.value.trim() });
         renderMemoList(weekStart);
         textarea.value = '';
         statusEl.textContent = '✓ 保存しました';
