@@ -1389,14 +1389,8 @@
       statusEl.style.color = '#868e96';
 
       try {
-        // Apps Script web app responses don't carry CORS headers, so a
-        // cross-origin fetch() in 'cors' mode fails even though the
-        // request itself succeeds server-side. 'no-cors' avoids the
-        // error; the tradeoff is we can't read the response body back,
-        // so success here just means the request was sent, not confirmed.
-        await fetch(MEMO_API_URL, {
+        const resp = await fetch(MEMO_API_URL, {
           method: 'POST',
-          mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             secret: MEMO_API_SECRET,
@@ -1405,6 +1399,8 @@
             author: authorInput.value.trim(),
           }),
         });
+        const result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'unknown error');
 
         allMemoData.push({
           '記録日時': new Date().toLocaleString('ja-JP'),
