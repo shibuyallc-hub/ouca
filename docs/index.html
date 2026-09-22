@@ -902,7 +902,7 @@
         byAd[key].purchases += parseFloat(row['購入数(Meta計測)']) || 0;
       });
 
-      const rows = Object.values(byAd).sort((a, b) => b.spend - a.spend);
+      const rows = Object.values(byAd).sort((a, b) => a.adName.localeCompare(b.adName, 'ja', { numeric: true }));
 
       tbody.innerHTML = '';
       if (rows.length === 0) {
