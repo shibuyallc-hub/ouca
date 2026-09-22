@@ -236,8 +236,8 @@
               <th>クリック数</th>
               <th>表示回数</th>
               <th>CTR</th>
+              <th>CPC(¥)</th>
               <th>CV数</th>
-              <th>CV値(¥)</th>
             </tr>
           </thead>
           <tbody id="googleCampaignTable">
@@ -257,11 +257,13 @@
               <th>広告費(¥)</th>
               <th>クリック数</th>
               <th>表示回数</th>
+              <th>CTR</th>
+              <th>CPC(¥)</th>
               <th>購入数</th>
             </tr>
           </thead>
           <tbody id="metaAdTable">
-            <tr><td colspan="6" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
           </tbody>
         </table>
       </div>
@@ -857,13 +859,12 @@
       filtered.forEach(row => {
         const name = row['キャンペーン名'] || '(不明)';
         if (!byCampaign[name]) {
-          byCampaign[name] = { spend: 0, clicks: 0, impressions: 0, cv: 0, cvValue: 0 };
+          byCampaign[name] = { spend: 0, clicks: 0, impressions: 0, cv: 0 };
         }
         byCampaign[name].spend += parseFloat(row['広告費(¥)']) || 0;
         byCampaign[name].clicks += parseFloat(row['クリック数']) || 0;
         byCampaign[name].impressions += parseFloat(row['表示回数']) || 0;
         byCampaign[name].cv += parseFloat(row['CV数(Google計測)']) || 0;
-        byCampaign[name].cvValue += parseFloat(row['CV値(¥)']) || 0;
       });
 
       const rows = Object.entries(byCampaign).sort((a, b) => b[1].spend - a[1].spend);
@@ -875,8 +876,9 @@
       }
       rows.forEach(([name, agg]) => {
         const ctr = agg.impressions > 0 ? (agg.clicks / agg.impressions * 100).toFixed(2) + '%' : '-';
+        const cpc = agg.clicks > 0 ? agg.spend / agg.clicks : 0;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${name}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${ctr}</td><td>${agg.cv.toFixed(1)}</td><td>¥${formatNumber(agg.cvValue)}</td>`;
+        tr.innerHTML = `<td>${name}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${ctr}</td><td>¥${formatNumber(cpc)}</td><td>${agg.cv.toFixed(1)}</td>`;
         tbody.appendChild(tr);
       });
     }
@@ -906,12 +908,14 @@
 
       tbody.innerHTML = '';
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
         return;
       }
       rows.forEach(agg => {
+        const ctr = agg.impressions > 0 ? (agg.clicks / agg.impressions * 100).toFixed(2) + '%' : '-';
+        const cpc = agg.clicks > 0 ? agg.spend / agg.clicks : 0;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${agg.adName}</td><td>${agg.campaignName}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${formatNumber(agg.purchases)}</td>`;
+        tr.innerHTML = `<td>${agg.adName}</td><td>${agg.campaignName}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${ctr}</td><td>¥${formatNumber(cpc)}</td><td>${formatNumber(agg.purchases)}</td>`;
         tbody.appendChild(tr);
       });
     }
