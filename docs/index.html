@@ -269,6 +269,41 @@
           </tbody>
         </table>
       </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 5px;">📅 月次・週次サマリー</h2>
+        <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※全期間のデータを対象に、月ごと・週（1-11日/12-18日/19-25日/26日〜月末）ごとに自動集計しています。月が増えるたびに表が下に追加されます。上部の期間フィルターの影響は受けません。Googleの「リスティング」「p-max」はキャンペーン名から自動判定しています。</p>
+
+        <h3 style="margin:5px 0 8px;font-size:14px;">ALL広告（Google+Meta）</h3>
+        <table>
+          <thead><tr><th>区分</th><th>広告費(¥)</th><th>imp</th><th>クリック数</th><th>CV数</th><th>CTR</th><th>購入率(CV/クリック)</th><th>CPC(¥)</th><th>CPM(¥)</th><th>CPA(¥)</th></tr></thead>
+          <tbody id="mwsTopAll"><tr><td colspan="10" style="text-align:center;padding:20px;">「最新データを取得」を押してください</td></tr></tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:14px;">Google 全体</h3>
+        <table>
+          <thead><tr><th>区分</th><th>広告費(¥)</th><th>imp</th><th>クリック数</th><th>CV数</th><th>CTR</th><th>購入率(CV/クリック)</th><th>CPC(¥)</th><th>CPM(¥)</th><th>CPA(¥)</th></tr></thead>
+          <tbody id="mwsGoogleAll"></tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:14px;">Google - リスティング</h3>
+        <table>
+          <thead><tr><th>区分</th><th>広告費(¥)</th><th>imp</th><th>クリック数</th><th>CV数</th><th>CTR</th><th>購入率(CV/クリック)</th><th>CPC(¥)</th><th>CPM(¥)</th><th>CPA(¥)</th></tr></thead>
+          <tbody id="mwsGoogleListing"></tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:14px;">Google - p-max</h3>
+        <table>
+          <thead><tr><th>区分</th><th>広告費(¥)</th><th>imp</th><th>クリック数</th><th>CV数</th><th>CTR</th><th>購入率(CV/クリック)</th><th>CPC(¥)</th><th>CPM(¥)</th><th>CPA(¥)</th></tr></thead>
+          <tbody id="mwsGooglePmax"></tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:14px;">Meta 全体</h3>
+        <table>
+          <thead><tr><th>区分</th><th>広告費(¥)</th><th>imp</th><th>クリック数</th><th>CV数</th><th>CTR</th><th>購入率(CV/クリック)</th><th>CPC(¥)</th><th>CPM(¥)</th><th>CPA(¥)</th></tr></thead>
+          <tbody id="mwsMetaAll"></tbody>
+        </table>
+      </div>
     </div>
 
     <div id="summary" class="sheet-content">
@@ -944,6 +979,7 @@
         renderMetaAdTab();
         renderDetailTab();
         renderWeeklyTab();
+        renderMonthlyWeeklySummary();
 
         document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ja-JP');
         showStatus('✓ データを取得しました', 'success');
@@ -1114,6 +1150,143 @@
         tr.innerHTML = `<td>${agg.adName}</td><td>${agg.campaignName}</td><td>¥${formatNumber(agg.spend)}</td><td>${formatNumber(agg.clicks)}</td><td>${formatNumber(agg.impressions)}</td><td>${ctr}</td><td>¥${formatNumber(cpc)}</td><td>${formatNumber(agg.purchases)}</td>`;
         tbody.appendChild(tr);
       });
+    }
+
+    // ===================== MONTHLY/WEEKLY SUMMARY (full history, ignores date filter) =====================
+    function mwsMonthKey(dateStr) { return dateStr.slice(0, 7); }
+    function mwsMonthLabel(dateStr) { return parseInt(dateStr.slice(5, 7), 10) + '月'; }
+    function mwsDaysInMonth(dateStr) {
+      const y = parseInt(dateStr.slice(0, 4), 10);
+      const m = parseInt(dateStr.slice(5, 7), 10);
+      return new Date(y, m, 0).getDate();
+    }
+    function mwsWeekBucket(dateStr) {
+      const day = parseInt(dateStr.slice(8, 10), 10);
+      if (day <= 11) return '1-11';
+      if (day <= 18) return '12-18';
+      if (day <= 25) return '19-25';
+      return `26-${mwsDaysInMonth(dateStr)}`;
+    }
+    const MWS_WEEK_ORDER = ['1-11', '12-18', '19-25'];
+    function mwsSortWeekKeys(keys) {
+      return keys.sort((a, b) => {
+        const ai = MWS_WEEK_ORDER.indexOf(a), bi = MWS_WEEK_ORDER.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.localeCompare(b);
+      });
+    }
+
+    function mwsAggregate(rows) {
+      let spend = 0, clicks = 0, impressions = 0, cv = 0;
+      rows.forEach(r => { spend += r.spend; clicks += r.clicks; impressions += r.impressions; cv += r.cv; });
+      return {
+        spend, clicks, impressions, cv,
+        ctr: impressions > 0 ? clicks / impressions * 100 : 0,
+        cvr: clicks > 0 ? cv / clicks * 100 : 0,
+        cpc: clicks > 0 ? spend / clicks : 0,
+        cpm: impressions > 0 ? spend / impressions * 1000 : 0,
+        cpa: cv > 0 ? spend / cv : 0,
+      };
+    }
+
+    function mwsToDailyMap(arr, spendKey, clicksKey, impKey, cvKey) {
+      const map = {};
+      arr.forEach(row => {
+        const date = row['日付'];
+        if (!date) return;
+        if (!map[date]) map[date] = { date, spend: 0, clicks: 0, impressions: 0, cv: 0 };
+        map[date].spend += parseFloat(row[spendKey]) || 0;
+        map[date].clicks += parseFloat(row[clicksKey]) || 0;
+        map[date].impressions += parseFloat(row[impKey]) || 0;
+        map[date].cv += parseFloat(row[cvKey]) || 0;
+      });
+      return Object.values(map);
+    }
+
+    function mwsBuildBlock(dailyRows) {
+      const allTotal = mwsAggregate(dailyRows);
+      const byMonth = {};
+      dailyRows.forEach(r => {
+        const mk = mwsMonthKey(r.date);
+        if (!byMonth[mk]) byMonth[mk] = { label: mwsMonthLabel(r.date), rows: [], weeks: {} };
+        byMonth[mk].rows.push(r);
+        const wb = mwsWeekBucket(r.date);
+        if (!byMonth[mk].weeks[wb]) byMonth[mk].weeks[wb] = [];
+        byMonth[mk].weeks[wb].push(r);
+      });
+      const months = Object.keys(byMonth).sort().map(mk => {
+        const m = byMonth[mk];
+        const weekKeys = mwsSortWeekKeys(Object.keys(m.weeks));
+        return {
+          label: m.label,
+          total: mwsAggregate(m.rows),
+          weeks: weekKeys.map(wk => ({ label: wk, metrics: mwsAggregate(m.weeks[wk]) })),
+        };
+      });
+      return { allTotal, months };
+    }
+
+    function mwsRowHtml(label, metrics, kind) {
+      let style = '';
+      let labelHtml = label;
+      if (kind === 'all') style = 'font-weight:700;background:#f1f3f5;';
+      else if (kind === 'month') style = 'font-weight:600;background:#fff9db;';
+      else labelHtml = `<span style="padding-left:16px;color:#495057;">${label}</span>`;
+      return `<tr style="${style}">
+        <td>${labelHtml}</td>
+        <td>¥${formatNumber(metrics.spend)}</td>
+        <td>${formatNumber(metrics.impressions)}</td>
+        <td>${formatNumber(metrics.clicks)}</td>
+        <td>${formatNumber(metrics.cv)}</td>
+        <td>${metrics.ctr.toFixed(2)}%</td>
+        <td>${metrics.cvr.toFixed(2)}%</td>
+        <td>¥${formatNumber(metrics.cpc)}</td>
+        <td>¥${formatNumber(metrics.cpm)}</td>
+        <td>¥${formatNumber(metrics.cpa)}</td>
+      </tr>`;
+    }
+
+    function mwsRenderBlock(elId, dailyRows) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const block = mwsBuildBlock(dailyRows);
+      if (dailyRows.length === 0) {
+        el.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;">データがありません</td></tr>';
+        return;
+      }
+      let html = mwsRowHtml('ALL', block.allTotal, 'all');
+      block.months.forEach(m => {
+        html += mwsRowHtml(m.label, m.total, 'month');
+        m.weeks.forEach(w => { html += mwsRowHtml(w.label, w.metrics, 'week'); });
+      });
+      el.innerHTML = html;
+    }
+
+    function renderMonthlyWeeklySummary() {
+      const googleAllDaily = mwsToDailyMap(allGoogleCampaignData, '広告費(¥)', 'クリック数', '表示回数', 'CV数(Google計測)');
+      const googleListingRaw = allGoogleCampaignData.filter(r => !(r['キャンペーン名'] || '').toLowerCase().includes('pmax'));
+      const googlePmaxRaw = allGoogleCampaignData.filter(r => (r['キャンペーン名'] || '').toLowerCase().includes('pmax'));
+      const googleListingDaily = mwsToDailyMap(googleListingRaw, '広告費(¥)', 'クリック数', '表示回数', 'CV数(Google計測)');
+      const googlePmaxDaily = mwsToDailyMap(googlePmaxRaw, '広告費(¥)', 'クリック数', '表示回数', 'CV数(Google計測)');
+      const metaAllDaily = mwsToDailyMap(allMetaAdData, '広告費(¥)', 'クリック数', '表示回数', '購入数(Meta計測)');
+
+      const combinedMap = {};
+      [...googleAllDaily, ...metaAllDaily].forEach(r => {
+        if (!combinedMap[r.date]) combinedMap[r.date] = { date: r.date, spend: 0, clicks: 0, impressions: 0, cv: 0 };
+        combinedMap[r.date].spend += r.spend;
+        combinedMap[r.date].clicks += r.clicks;
+        combinedMap[r.date].impressions += r.impressions;
+        combinedMap[r.date].cv += r.cv;
+      });
+      const combinedAllDaily = Object.values(combinedMap);
+
+      mwsRenderBlock('mwsTopAll', combinedAllDaily);
+      mwsRenderBlock('mwsGoogleAll', googleAllDaily);
+      mwsRenderBlock('mwsGoogleListing', googleListingDaily);
+      mwsRenderBlock('mwsGooglePmax', googlePmaxDaily);
+      mwsRenderBlock('mwsMetaAll', metaAllDaily);
     }
 
     // ===================== DETAIL TAB (age/gender, region, events) =====================
