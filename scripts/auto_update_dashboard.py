@@ -296,10 +296,12 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
         except Exception as e:
             print(f"  ✗ RSA asset performance error: {e}")
 
-        # ----- P-Max headline/description performance labels -----
+        # ----- P-Max headline/description text (performance_label field isn't
+        # queryable on asset_group_asset in this API version, unlike RSA's
+        # ad_group_ad_asset_view - just list what copy is running) -----
         gaql_pmax_assets = """
             SELECT campaign.name, asset_group.name, asset.text_asset.text,
-                   asset_group_asset.field_type, asset_group_asset.performance_label
+                   asset_group_asset.field_type
             FROM asset_group_asset
             WHERE asset_group_asset.field_type IN ('HEADLINE', 'LONG_HEADLINE', 'DESCRIPTION')
         """
@@ -313,11 +315,11 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
                         'group': row.asset_group.name,
                         'text': row.asset.text_asset.text,
                         'field_type': row.asset_group_asset.field_type.name,
-                        'performance_label': row.asset_group_asset.performance_label.name,
+                        'performance_label': 'N/A',
                         'source': 'P-Max',
                     })
                     pmax_asset_count += 1
-            print(f"  ✓ {pmax_asset_count} P-Max asset performance records found")
+            print(f"  ✓ {pmax_asset_count} P-Max asset records found")
         except Exception as e:
             print(f"  ✗ P-Max asset performance error: {e}")
 
