@@ -148,6 +148,8 @@ google_ads_daily = {}
 google_ads_campaign_data = []
 google_ads_age_data = []
 google_ads_gender_data = []
+google_ads_keyword_data = []
+google_ads_asset_data = []
 
 if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET,
         GOOGLE_ADS_REFRESH_TOKEN, GOOGLE_ADS_CUSTOMER_ID]):
@@ -247,6 +249,77 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
                 })
 
         print(f"  ✓ {len(google_ads_age_data)} age records / {len(google_ads_gender_data)} gender records found (Performance Max campaigns won't report here)")
+
+        # ----- Search keyword performance (Search campaigns only; P-Max has no keyword_view) -----
+        gaql_keywords = f"""
+            SELECT segments.date, campaign.name, ad_group_criterion.keyword.text,
+                   ad_group_criterion.keyword.match_type,
+                   metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
+            FROM keyword_view
+            WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
+        """
+        keyword_stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_keywords)
+        for batch in keyword_stream:
+            for row in batch.results:
+                google_ads_keyword_data.append({
+                    'date': row.segments.date.replace('-', ''),
+                    'campaign': row.campaign.name,
+                    'keyword': row.ad_group_criterion.keyword.text,
+                    'match_type': row.ad_group_criterion.keyword.match_type.name,
+                    'spend': row.metrics.cost_micros / 1_000_000,
+                    'clicks': row.metrics.clicks,
+                    'impressions': row.metrics.impressions,
+                    'conversions': row.metrics.conversions,
+                })
+        print(f"  ✓ {len(google_ads_keyword_data)} keyword records found")
+
+        # ----- RSA headline/description performance labels (Search ads) -----
+        gaql_rsa_assets = """
+            SELECT campaign.name, ad_group.name, asset.text_asset.text,
+                   ad_group_ad_asset_view.field_type, ad_group_ad_asset_view.performance_label
+            FROM ad_group_ad_asset_view
+            WHERE ad_group_ad_asset_view.field_type IN ('HEADLINE', 'DESCRIPTION')
+        """
+        try:
+            rsa_asset_stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_rsa_assets)
+            for batch in rsa_asset_stream:
+                for row in batch.results:
+                    google_ads_asset_data.append({
+                        'campaign': row.campaign.name,
+                        'group': row.ad_group.name,
+                        'text': row.asset.text_asset.text,
+                        'field_type': row.ad_group_ad_asset_view.field_type.name,
+                        'performance_label': row.ad_group_ad_asset_view.performance_label.name,
+                        'source': 'RSA(検索)',
+                    })
+            print(f"  ✓ {len(google_ads_asset_data)} RSA asset performance records found")
+        except Exception as e:
+            print(f"  ✗ RSA asset performance error: {e}")
+
+        # ----- P-Max headline/description performance labels -----
+        gaql_pmax_assets = """
+            SELECT campaign.name, asset_group.name, asset.text_asset.text,
+                   asset_group_asset.field_type, asset_group_asset.performance_label
+            FROM asset_group_asset
+            WHERE asset_group_asset.field_type IN ('HEADLINE', 'LONG_HEADLINE', 'DESCRIPTION')
+        """
+        try:
+            pmax_asset_stream = ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_pmax_assets)
+            pmax_asset_count = 0
+            for batch in pmax_asset_stream:
+                for row in batch.results:
+                    google_ads_asset_data.append({
+                        'campaign': row.campaign.name,
+                        'group': row.asset_group.name,
+                        'text': row.asset.text_asset.text,
+                        'field_type': row.asset_group_asset.field_type.name,
+                        'performance_label': row.asset_group_asset.performance_label.name,
+                        'source': 'P-Max',
+                    })
+                    pmax_asset_count += 1
+            print(f"  ✓ {pmax_asset_count} P-Max asset performance records found")
+        except Exception as e:
+            print(f"  ✗ P-Max asset performance error: {e}")
 
     except Exception as e:
         print(f"  ✗ Google Ads API error: {e}")
@@ -1082,6 +1155,61 @@ for item in sorted(google_ads_campaign_data, key=lambda x: x['date']):
 
 ws_gcamp.append_rows(rows_gcamp)
 print(f"  ✓ {len(google_ads_campaign_data)} rows written to Google_キャンペーン別 sheet")
+
+# ===== CREATE/UPDATE GOOGLE ADS KEYWORD SHEET =====
+print("\n💾 Updating Google Ads keyword sheet...")
+
+sheet_name_gkw = 'Google_検索キーワード別'
+try:
+    ws_gkw = sheet.worksheet(sheet_name_gkw)
+    ws_gkw.clear()
+except:
+    ws_gkw = sheet.add_worksheet(sheet_name_gkw, rows=3000, cols=10)
+
+rows_gkw = [['日付', 'キャンペーン名', 'キーワード', 'マッチタイプ', '広告費(¥)', 'クリック数', '表示回数', 'CV数', '更新日時']]
+
+for item in sorted(google_ads_keyword_data, key=lambda x: x['date']):
+    date_obj = datetime.strptime(item['date'], '%Y%m%d')
+    rows_gkw.append([
+        date_obj.strftime('%Y-%m-%d'),
+        item['campaign'],
+        item['keyword'],
+        item['match_type'],
+        round(item['spend'], 0),
+        int(item['clicks']),
+        int(item['impressions']),
+        round(item['conversions'], 2),
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_gkw.append_rows(rows_gkw)
+print(f"  ✓ {len(google_ads_keyword_data)} rows written to Google_検索キーワード別 sheet")
+
+# ===== CREATE/UPDATE GOOGLE ADS ASSET PERFORMANCE SHEET =====
+print("\n💾 Updating Google Ads asset performance sheet...")
+
+sheet_name_gasset = 'Google_アセット評価'
+try:
+    ws_gasset = sheet.worksheet(sheet_name_gasset)
+    ws_gasset.clear()
+except:
+    ws_gasset = sheet.add_worksheet(sheet_name_gasset, rows=1000, cols=8)
+
+rows_gasset = [['種別', 'キャンペーン名', 'グループ名', '項目種別', 'テキスト', 'Google評価', '更新日時']]
+
+for item in google_ads_asset_data:
+    rows_gasset.append([
+        item['source'],
+        item['campaign'],
+        item['group'],
+        item['field_type'],
+        item['text'],
+        item['performance_label'],
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ])
+
+ws_gasset.append_rows(rows_gasset)
+print(f"  ✓ {len(google_ads_asset_data)} rows written to Google_アセット評価 sheet")
 
 # ===== CREATE/UPDATE META ADS AD-LEVEL SHEET =====
 print("\n💾 Updating Meta Ads ad-level sheet...")
