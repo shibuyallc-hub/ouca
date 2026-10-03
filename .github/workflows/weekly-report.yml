@@ -5,6 +5,11 @@ on:
     # 毎週月曜 日本時間9時 (UTC 0時)
     - cron: '0 0 * * 1'
   workflow_dispatch:  # 手動実行も可能
+    inputs:
+      mode:
+        description: 'weekly=前週(確定)+今週(途中) / backfill=全週を再生成 / current=今週(途中)のみ'
+        required: true
+        default: 'weekly'
 
 jobs:
   report:
@@ -32,6 +37,7 @@ jobs:
       - name: Run weekly report script
         env:
           SERVICE_ACCOUNT_JSON_PATH: service_account.json
+          REPORT_MODE: ${{ github.event.inputs.mode || 'weekly' }}
         run: |
           python scripts/weekly_report.py
 

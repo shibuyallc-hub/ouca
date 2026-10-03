@@ -596,12 +596,25 @@
 
         <div class="data-table">
           <h2 style="margin-bottom: 15px;">📊 媒体別内訳</h2>
+          <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>媒体</th><th>広告費(¥)</th><th>CV数</th></tr>
+              <tr><th>媒体</th><th>広告費(¥)</th><th>表示回数</th><th>クリック</th><th>CTR</th><th>CPC(¥)</th><th>CV数</th><th>CPA(¥)</th><th>売上(¥)</th><th>ROAS</th></tr>
             </thead>
             <tbody id="wkPlatformTable"></tbody>
           </table>
+          </div>
+          <p id="wkMetaWarning" style="display:none;margin-top:12px;padding:10px 14px;background:#fff5f5;border:1px solid #ffa8a8;border-radius:6px;color:#c92a2a;font-size:13px;">⚠️ Metaの数値が0です。Meta広告のデータが取得できていない可能性があります（APIトークンの期限切れなど）。</p>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">📣 Meta広告別（クリエイティブ別）</h2>
+          <ul id="wkMetaAds" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
+        </div>
+
+        <div class="data-table">
+          <h2 style="margin-bottom: 15px;">🔎 Googleキャンペーン別</h2>
+          <ul id="wkGoogleCamps" style="margin:0;padding-left:20px;line-height:1.9;"></ul>
         </div>
 
         <div class="data-table">
@@ -1477,7 +1490,7 @@
         sorted.forEach(row => {
           const opt = document.createElement('option');
           opt.value = row['週開始日'];
-          opt.textContent = `${row['週開始日']} 〜 ${row['週終了日']}`;
+          opt.textContent = `${row['週開始日']} 〜 ${row['週終了日']}${row['ステータス'] === '途中経過' ? '（今週・途中経過）' : ''}`;
           selector.appendChild(opt);
         });
         selector.addEventListener('change', renderWeeklyTab);
@@ -1490,17 +1503,33 @@
       empty.style.display = 'none';
       content.style.display = 'block';
 
-      document.getElementById('weeklyRangeLabel').textContent = `対象週: ${week['週開始日']} 〜 ${week['週終了日']}（生成日時: ${week['生成日時'] || '-'}）`;
+      const wkStatus = week['ステータス'] || '確定';
+      document.getElementById('weeklyRangeLabel').textContent = `対象週: ${week['週開始日']} 〜 ${week['週終了日']}【${wkStatus}${wkStatus === '途中経過' ? '・評価コメントは暫定' : ''}】（生成日時: ${week['生成日時'] || '-'}）`;
       document.getElementById('wkSpend').textContent = '¥' + formatNumber(parseFloat(week['総広告費(¥)']) || 0);
       document.getElementById('wkCV').textContent = formatNumber(parseFloat(week['総CV数']) || 0);
       document.getElementById('wkRoas').textContent = (parseFloat(week['ROAS']) || 0).toFixed(2) + '倍';
       document.getElementById('wkCpa').textContent = '¥' + formatNumber(parseFloat(week['CPA(¥)']) || 0);
 
-      const platformTbody = document.getElementById('wkPlatformTable');
-      platformTbody.innerHTML = `
-        <tr><td>Google</td><td>¥${formatNumber(parseFloat(week['Google広告費(¥)']) || 0)}</td><td>${formatNumber(parseFloat(week['Google CV数']) || 0)}</td></tr>
-        <tr><td>Meta</td><td>¥${formatNumber(parseFloat(week['Meta広告費(¥)']) || 0)}</td><td>${formatNumber(parseFloat(week['Meta CV数']) || 0)}</td></tr>
-      `;
+      const nv = (k) => parseFloat(week[k]);
+      const hasNum = (k) => week[k] !== undefined && week[k] !== '' && !isNaN(nv(k));
+      const metricRow = (label, spend, impr, clicks, cv, revenue) => {
+        const ctr = impr > 0 ? (clicks / impr * 100).toFixed(2) + '%' : '-';
+        const cpc = clicks > 0 ? '¥' + formatNumber(Math.round(spend / clicks)) : '-';
+        const cpa = cv > 0 ? '¥' + formatNumber(Math.round(spend / cv)) : '-';
+        const roas = spend > 0 ? (revenue / spend).toFixed(2) + '倍' : '-';
+        return `<tr><td>${label}</td><td>¥${formatNumber(Math.round(spend))}</td><td>${impr ? formatNumber(Math.round(impr)) : '-'}</td><td>${formatNumber(Math.round(clicks))}</td><td>${ctr}</td><td>${cpc}</td><td>${formatNumber(Math.round(cv))}</td><td>${cpa}</td><td>¥${formatNumber(Math.round(revenue))}</td><td>${roas}</td></tr>`;
+      };
+      const gSpend = nv('Google広告費(¥)') || 0, mSpend = nv('Meta広告費(¥)') || 0;
+      const gCv = nv('Google CV数') || 0, mCv = nv('Meta CV数') || 0;
+      const gImpr = hasNum('Google表示回数') ? nv('Google表示回数') : 0, mImpr = hasNum('Meta表示回数') ? nv('Meta表示回数') : 0;
+      const gClicks = hasNum('Googleクリック数') ? nv('Googleクリック数') : 0, mClicks = hasNum('Metaクリック数') ? nv('Metaクリック数') : 0;
+      const gRev = hasNum('Google売上(¥)') ? nv('Google売上(¥)') : 0, mRev = hasNum('Meta売上(¥)') ? nv('Meta売上(¥)') : 0;
+      document.getElementById('wkPlatformTable').innerHTML =
+        metricRow('Google', gSpend, gImpr, gClicks, gCv, gRev) +
+        metricRow('Meta', mSpend, mImpr, mClicks, mCv, mRev) +
+        metricRow('<b>合計</b>', parseFloat(week['総広告費(¥)']) || 0, hasNum('総表示回数') ? nv('総表示回数') : 0,
+                  hasNum('総クリック数') ? nv('総クリック数') : 0, parseFloat(week['総CV数']) || 0, parseFloat(week['総売上(¥)']) || 0);
+      document.getElementById('wkMetaWarning').style.display = (mSpend === 0 && (nv('総広告費(¥)') || 0) > 0) ? 'block' : 'none';
 
       const fillList = (elId, text) => {
         const el = document.getElementById(elId);
@@ -1517,6 +1546,8 @@
         });
       };
 
+      fillList('wkMetaAds', week['Meta広告別']);
+      fillList('wkGoogleCamps', week['Googleキャンペーン別']);
       fillList('wkGood', week['GOOD']);
       fillList('wkBad', week['BAD']);
       fillList('wkImprove', week['改善ポイント']);

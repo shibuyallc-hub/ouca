@@ -45,6 +45,13 @@ jobs:
         run: |
           python scripts/auto_update_dashboard.py
 
+      - name: Refresh current-week report (途中経過)
+        env:
+          SERVICE_ACCOUNT_JSON_PATH: service_account.json
+          REPORT_MODE: current
+        run: |
+          python scripts/weekly_report.py
+
       - name: Clean up secrets
         if: always()
         run: rm -f service_account.json
