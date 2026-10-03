@@ -329,6 +329,13 @@ else:
     print("  ⚠ Google Ads credentials not fully configured — spend will be 0")
 
 # ===== FETCH REAL META ADS SPEND/CLICKS =====
+def _meta_check(r):
+    """Metaが4xx/5xxを返したとき、原因が分かるようエラー本文をログに出す（トークンは含まれない）。"""
+    if not r.ok:
+        print(f"  ✗ Meta API HTTP {r.status_code}: {r.text[:600]}")
+    r.raise_for_status()
+
+
 print("\n💰 Fetching Meta Ads spend data...")
 
 meta_ads_daily = {}
@@ -353,7 +360,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
         next_params = params
         while next_url:
             resp = requests.get(next_url, params=next_params, timeout=30)
-            resp.raise_for_status()
+            _meta_check(resp)
             payload = resp.json()
 
             for row in payload.get('data', []):
@@ -383,7 +390,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
         next_params = ad_params
         while next_url:
             resp = requests.get(next_url, params=next_params, timeout=30)
-            resp.raise_for_status()
+            _meta_check(resp)
             payload = resp.json()
 
             for row in payload.get('data', []):
@@ -423,7 +430,7 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
         next_params = demo_params
         while next_url:
             resp = requests.get(next_url, params=next_params, timeout=30)
-            resp.raise_for_status()
+            _meta_check(resp)
             payload = resp.json()
 
             for row in payload.get('data', []):
