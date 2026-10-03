@@ -1,0 +1,32 @@
+name: Add Negative Keywords
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'true = 確認のみ（登録しない）/ false = 本登録'
+        required: true
+        default: 'true'
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install google-ads
+
+      - name: Add negative keywords
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          GOOGLE_ADS_DEVELOPER_TOKEN: ${{ secrets.GOOGLE_ADS_DEVELOPER_TOKEN }}
+          GOOGLE_ADS_CLIENT_ID: ${{ secrets.GOOGLE_ADS_CLIENT_ID }}
+          GOOGLE_ADS_CLIENT_SECRET: ${{ secrets.GOOGLE_ADS_CLIENT_SECRET }}
+          GOOGLE_ADS_REFRESH_TOKEN: ${{ secrets.GOOGLE_ADS_REFRESH_TOKEN }}
+          GOOGLE_ADS_CUSTOMER_ID: ${{ secrets.GOOGLE_ADS_CUSTOMER_ID }}
+        run: python scripts/add_negative_keywords.py
