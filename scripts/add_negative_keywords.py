@@ -102,8 +102,11 @@ for camp_id, camp_name, ch, _ in campaigns:
     failed = 0
     for i in range(0, len(ops), 100):
         chunk = ops[i:i + 100]
-        resp = criterion_svc.mutate_campaign_criteria(
-            customer_id=customer_id, operations=chunk, partial_failure=True)
+        request = client.get_type("MutateCampaignCriteriaRequest")
+        request.customer_id = customer_id
+        request.operations.extend(chunk)
+        request.partial_failure = True
+        resp = criterion_svc.mutate_campaign_criteria(request=request)
         pf = resp.partial_failure_error
         if pf.code != 0:
             failure_cls = type(client.get_type("GoogleAdsFailure"))
