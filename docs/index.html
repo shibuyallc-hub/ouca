@@ -32,6 +32,7 @@
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; padding: 20px; background: white; border-bottom: 1px solid #e9ecef; }
     @media (max-width: 1024px) { .summary { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 640px) { .summary { grid-template-columns: 1fr; } }
+    @media (min-width: 1025px) { .summary.summary-3col { grid-template-columns: repeat(3, 1fr); } }
     .kpi-card { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; }
     .kpi-label { font-size: 12px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; }
     .kpi-value { font-size: 24px; font-weight: 700; }
@@ -334,11 +335,7 @@
         </div>
       </div>
 
-      <div class="summary" style="border-bottom:none;">
-        <div class="kpi-card">
-          <div class="kpi-label">本日のPV</div>
-          <div class="kpi-value" id="todayPV">0</div>
-        </div>
+      <div class="summary summary-3col" style="border-bottom:none;">
         <div class="kpi-card">
           <div class="kpi-label">選択期間 総セッション数</div>
           <div class="kpi-value" id="totalSessions">0</div>
@@ -352,19 +349,18 @@
           <div class="kpi-value" id="trafficTotalCV">0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">平均滞在時間</div>
+          <div class="kpi-label">選択期間 平均滞在時間</div>
           <div class="kpi-value" id="avgDuration">0秒</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">直帰率</div>
+          <div class="kpi-label">選択期間 直帰率</div>
           <div class="kpi-value" id="bounceRate">0%</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">1セッションあたりPV数</div>
+          <div class="kpi-label">選択期間 1セッションあたりPV数</div>
           <div class="kpi-value" id="pagesPerSession">0</div>
         </div>
       </div>
-      <p style="padding:0 20px;font-size:12px;color:#868e96;">※本日のPVは1日1回（朝9時）の自動更新時点の数値です。リアルタイムの数値ではありません。</p>
 
       <div class="insight-box" id="trafficInsights">
         <h3>📝 このデータから読み解けること</h3>
@@ -1738,19 +1734,6 @@
       const byChannel = {};
       let totalSessions = 0, totalPV = 0, totalCV = 0;
       let durationWeighted = 0, bounceWeighted = 0;
-      let latestDate = null, todayPV = 0;
-
-      allTrafficData.forEach(row => {
-        if (!passesChannelFilter(row['流入経路'], chFilter)) return;
-        const pv = parseFloat(row['PV数']) || 0;
-        if (!row['日付']) return;
-        if (!latestDate || row['日付'] > latestDate) {
-          latestDate = row['日付'];
-          todayPV = pv;
-        } else if (row['日付'] === latestDate) {
-          todayPV += pv;
-        }
-      });
 
       filtered.forEach(row => {
         const channel = row['流入経路'] || '不明';
@@ -1778,7 +1761,6 @@
       const bounceRate = totalSessions > 0 ? bounceWeighted / totalSessions : 0;
       const pagesPerSession = totalSessions > 0 ? totalPV / totalSessions : 0;
 
-      document.getElementById('todayPV').textContent = formatNumber(todayPV);
       document.getElementById('totalSessions').textContent = formatNumber(totalSessions);
       document.getElementById('totalPV').textContent = formatNumber(totalPV);
       document.getElementById('trafficTotalCV').textContent = formatNumber(totalCV);
