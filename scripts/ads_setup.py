@@ -68,9 +68,32 @@ if MODE == 'inspect':
     def adgroups():
         for r in q("SELECT ad_group.id, ad_group.name, ad_group.status, campaign.name FROM ad_group WHERE ad_group.status != 'REMOVED'"):
             print(r.campaign.name, r.ad_group.id, r.ad_group.name, r.ad_group.status.name)
+    def ext_assets():
+        for r in q("""SELECT asset.id, asset.type, asset.final_urls, asset.callout_asset.callout_text,
+            asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2,
+            asset.structured_snippet_asset.header, asset.structured_snippet_asset.values,
+            asset.youtube_video_asset.youtube_video_id, asset.youtube_video_asset.youtube_video_title
+            FROM asset WHERE asset.type IN ('CALLOUT','SITELINK','STRUCTURED_SNIPPET','YOUTUBE_VIDEO','PRICE')"""):
+            a = r.asset
+            t = a.type_.name
+            if t == 'CALLOUT': print(a.id, t, a.callout_asset.callout_text)
+            elif t == 'SITELINK': print(a.id, t, a.sitelink_asset.link_text, '|', a.sitelink_asset.description1, '|', a.sitelink_asset.description2, '|', list(a.final_urls))
+            elif t == 'STRUCTURED_SNIPPET': print(a.id, t, a.structured_snippet_asset.header, list(a.structured_snippet_asset.values))
+            elif t == 'YOUTUBE_VIDEO': print(a.id, t, a.youtube_video_asset.youtube_video_id, a.youtube_video_asset.youtube_video_title)
+            else: print(a.id, t)
+    def existing_neg():
+        for r in q("SELECT campaign.name, campaign_criterion.keyword.text FROM campaign_criterion WHERE campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'"):
+            pass
+        n = {}
+        for r in q("SELECT campaign.name, campaign_criterion.keyword.text FROM campaign_criterion WHERE campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'"):
+            n.setdefault(r.campaign.name, []).append(r.campaign_criterion.keyword.text)
+        for k, v in n.items(): print(k, len(v), v[:100])
+    def geo_lang():
+        for r in q("SELECT campaign.name, campaign_criterion.type, campaign_criterion.location.geo_target_constant, campaign_criterion.language.language_constant, campaign_criterion.negative FROM campaign_criterion WHERE campaign_criterion.type IN ('LOCATION','LANGUAGE')"):
+            print(r.campaign.name, r.campaign_criterion.type_.name, r.campaign_criterion.location.geo_target_constant, r.campaign_criterion.language.language_constant)
     for t, f in [('customer',customer),('campaigns',campaigns),('conversion actions',convs),('image assets',images),
                  ('asset group image assets',ag_assets),('campaign assets',camp_assets),('bidding strategies',bidstr),
-                 ('custom audiences',custaud),('ad groups',adgroups)]:
+                 ('custom audiences',custaud),('extension assets',ext_assets),('existing negatives',existing_neg),('geo/lang',geo_lang),('ad groups',adgroups)]:
         section(t, f)
     sys.exit(0)
 print("unknown mode", MODE)
