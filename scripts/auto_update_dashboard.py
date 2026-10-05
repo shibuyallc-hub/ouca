@@ -842,14 +842,18 @@ except Exception as e:
 # 付与前のデータは "(not set)" になるため「未分類（設定前）」として扱う。
 print("\n🧭 Fetching LP breakdown from GA4...")
 
-def lp_label(cg):
+# コンテンツグループの計測を開始した日（GTM公開日）。これより前の「(not set)」は、LPがなかった/LP別計測前の
+# 全体＝ほぼショップなので「ショップ」にまとめる（※10/4のLPテスト購入1件が含まれる）。開始日以降の「(not set)」は未分類として残す。
+LP_TRACKING_START = '20261005'
+
+def lp_label(cg, date=''):
     cg = (cg or '').strip()
     if cg.startswith('LP:'):
         return cg[3:].strip() or '(LP名なし)'
     if cg == 'ショップ':
         return 'ショップ'
     if cg in ('', '(not set)'):
-        return '未分類（設定前）'
+        return 'ショップ' if (date and date < LP_TRACKING_START) else '未分類'
     return cg
 
 lp_map = {}
@@ -869,7 +873,7 @@ try:
         date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
     for row in ga4_client.run_report(req_lp_purchase).rows:
-        r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value), channel_to_bucket(row.dimension_values[2].value))
+        r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value, row.dimension_values[0].value), channel_to_bucket(row.dimension_values[2].value))
         r['purchases'] += int(float(row.metric_values[0].value))
         r['revenue'] += float(row.metric_values[1].value)
     print(f"  ✓ LP purchase records: {len(lp_map)} keys")
@@ -884,7 +888,7 @@ try:
         date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
     for row in ga4_client.run_report(req_lp_sessions).rows:
-        r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value), channel_to_bucket(row.dimension_values[2].value))
+        r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value, row.dimension_values[0].value), channel_to_bucket(row.dimension_values[2].value))
         r['sessions'] += int(float(row.metric_values[0].value))
         r['views'] += int(float(row.metric_values[1].value))
     print(f"  ✓ LP session records merged: {len(lp_map)} keys total")
