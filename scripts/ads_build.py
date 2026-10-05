@@ -52,19 +52,17 @@ def run(client, CID, MODE):
     neg_pmax = list(dict.fromkeys(neg_by_camp.get('ouca_supplement_pmax', []) + cfg['NEG']))
     print("引き継ぐ除外KW:", len(neg_search), len(neg_pmax))
 
-    # ---------- 画像アセット ----------
-    img_rn = {}
+    # ---------- 画像アセット：現行P-Maxのアセットグループで使われている画像・動画をそのまま使う ----------
     asvc = client.get_service("AssetService")
-    for f in sorted(glob.glob('ads_setup/images/*.jpg')):
-        nm = 'adsx_' + os.path.basename(f)
-        key = ('IMAGE', nm)
-        if key in named_assets:
-            img_rn[os.path.basename(f)[:-4]] = named_assets[key]; continue
-        op = client.get_type("AssetOperation"); a = op.create
-        a.name = nm; a.image_asset.data = open(f, 'rb').read()
-        res = asvc.mutate_assets(customer_id=CID, operations=[op])
-        img_rn[os.path.basename(f)[:-4]] = res.results[0].resource_name
-        print("image uploaded:", nm, res.results[0].resource_name)
+    EXCLUDE_PREFIX = ('ouca_a-1',)     # 「初回10%OFF」表記を含むバナー（現在の特典は15%OFF）
+    cur_media = {'MARKETING_IMAGE': [], 'SQUARE_MARKETING_IMAGE': [], 'PORTRAIT_MARKETING_IMAGE': [],
+                 'TALL_PORTRAIT_MARKETING_IMAGE': [], 'YOUTUBE_VIDEO': []}
+    for r in q("""SELECT asset_group_asset.field_type, asset.resource_name, asset.name FROM asset_group_asset
+                  WHERE asset_group.id = 6746797318 AND asset_group_asset.status != 'REMOVED'"""):
+        ft = r.asset_group_asset.field_type.name
+        if ft in cur_media and not r.asset.name.startswith(EXCLUDE_PREFIX):
+            cur_media[ft].append(r.asset.resource_name)
+    print("現行P-Maxの画像・動画:", {k: len(v) for k, v in cur_media.items()})
 
     # ---------- ヘルパー ----------
     class Ops:
@@ -182,7 +180,7 @@ def run(client, CID, MODE):
         except GoogleAdsException as ex:
             print("CTA asset failed:", ex.failure.errors[0].message)
 
-    def build_pmax(key, lp, heads, longs, short, descs, imgs, videos):
+    def build_pmax(key, lp, heads, longs, short, descs, imgs=None, videos=None):
         name = NAMES[key]
         if name in existing_campaigns: print("SKIP (exists):", name); return
         text_assets.clear(); text_assets.update(load_text_assets())
@@ -204,13 +202,11 @@ def run(client, CID, MODE):
         for l in longs: assert wd(l) <= 90, l; link(text_asset_rn(o, l), E.AssetFieldTypeEnum.LONG_HEADLINE)
         assert wd(short) <= 60, short; link(text_asset_rn(o, short), E.AssetFieldTypeEnum.DESCRIPTION)
         for d in descs: assert wd(d) <= 90, d; link(text_asset_rn(o, d), E.AssetFieldTypeEnum.DESCRIPTION)
-        link(ga.asset_path(CID, A_BUSINESS), E.AssetFieldTypeEnum.BUSINESS_NAME)
-        link(ga.asset_path(CID, A_LOGO), E.AssetFieldTypeEnum.LOGO)
-        link(ga.asset_path(CID, A_LLOGO), E.AssetFieldTypeEnum.LANDSCAPE_LOGO)
-        for nm in imgs['land']: link(img_rn[nm], E.AssetFieldTypeEnum.MARKETING_IMAGE)
-        for nm in imgs['sq']: link(img_rn[nm], E.AssetFieldTypeEnum.SQUARE_MARKETING_IMAGE)
-        for nm in imgs['port']: link(img_rn[nm], E.AssetFieldTypeEnum.PORTRAIT_MARKETING_IMAGE)
-        for v in videos: link(ga.asset_path(CID, v), E.AssetFieldTypeEnum.YOUTUBE_VIDEO)
+        link_campaign_asset(o, c, ga.asset_path(CID, A_BUSINESS), E.AssetFieldTypeEnum.BUSINESS_NAME)
+        link_campaign_asset(o, c, ga.asset_path(CID, A_LOGO), E.AssetFieldTypeEnum.LOGO)
+        link_campaign_asset(o, c, ga.asset_path(CID, A_LLOGO), E.AssetFieldTypeEnum.LANDSCAPE_LOGO)
+        for ft, rns in cur_media.items():
+            for rn_ in rns: link(rn_, getattr(E.AssetFieldTypeEnum, ft))
         if cta_rn: link(cta_rn, E.AssetFieldTypeEnum.CALL_TO_ACTION_SELECTION)
         extensions(o, c, lp)
         mutate(o, name)
