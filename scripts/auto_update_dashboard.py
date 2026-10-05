@@ -273,6 +273,61 @@ if all([GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECR
                 })
         print(f"  ✓ {len(google_ads_keyword_data)} keyword records found")
 
+        # ----- Google広告のCVは「購入（PURCHASE）」カテゴリだけにする -----
+        # Google広告側のコンバージョン設定は、チェックアウト開始（begin_checkout）などを主要CVに入れていることがある。
+        # その場合 metrics.conversions に購入以外が混ざるため、ここで購入カテゴリのCV・CV値だけを取り直して上書きする。
+        # 取得に失敗したときは、購入以外を表示しないよう 0 にする。
+        def _gads_purchase_map(resource, select_extra, key_fn):
+            gaql_p = f"""
+                SELECT segments.date, campaign.name, {select_extra}
+                       segments.conversion_action_category, metrics.conversions, metrics.conversions_value
+                FROM {resource}
+                WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}'
+            """
+            m = defaultdict(lambda: [0.0, 0.0])
+            cats = defaultdict(float)
+            for batch in ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_p):
+                for row in batch.results:
+                    cat = row.segments.conversion_action_category.name
+                    cats[cat] += row.metrics.conversions
+                    if cat != 'PURCHASE':
+                        continue
+                    k = key_fn(row)
+                    m[k][0] += row.metrics.conversions
+                    m[k][1] += row.metrics.conversions_value
+            return m, cats
+
+        def _apply_purchase_only(label, data, resource, select_extra, key_fn, item_key_fn):
+            try:
+                pm, cats = _gads_purchase_map(resource, select_extra, key_fn)
+                for it in data:
+                    c = pm.get(item_key_fn(it), [0.0, 0.0])
+                    it['conversions'] = c[0]
+                    if 'conversions_value' in it:
+                        it['conversions_value'] = c[1]
+                print(f"  ✓ {label}: purchase-only conversions applied (categories seen: " +
+                      ", ".join(f"{k}={v:.0f}" for k, v in sorted(cats.items())) + ")")
+            except Exception as e:
+                for it in data:
+                    it['conversions'] = 0
+                    if 'conversions_value' in it:
+                        it['conversions_value'] = 0
+                print(f"  ✗ {label}: could not fetch purchase-only conversions ({e}); set to 0 to avoid showing non-purchase conversions")
+
+        _apply_purchase_only('campaign', google_ads_campaign_data, 'campaign', '',
+            lambda r: (r.segments.date.replace('-', ''), r.campaign.name),
+            lambda it: (it['date'], it['campaign']))
+        _apply_purchase_only('age', google_ads_age_data, 'age_range_view', 'ad_group_criterion.age_range.type,',
+            lambda r: (r.segments.date.replace('-', ''), r.campaign.name, r.ad_group_criterion.age_range.type_.name),
+            lambda it: (it['date'], it['campaign'], it['age']))
+        _apply_purchase_only('gender', google_ads_gender_data, 'gender_view', 'ad_group_criterion.gender.type,',
+            lambda r: (r.segments.date.replace('-', ''), r.campaign.name, r.ad_group_criterion.gender.type_.name),
+            lambda it: (it['date'], it['campaign'], it['gender']))
+        _apply_purchase_only('keyword', google_ads_keyword_data, 'keyword_view',
+            'ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,',
+            lambda r: (r.segments.date.replace('-', ''), r.campaign.name, r.ad_group_criterion.keyword.text, r.ad_group_criterion.keyword.match_type.name),
+            lambda it: (it['date'], it['campaign'], it['keyword'], it['match_type']))
+
         # ----- RSA headline/description performance labels (Search ads) -----
         gaql_rsa_assets = """
             SELECT campaign.name, ad_group.name, asset.text_asset.text,
