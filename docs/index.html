@@ -480,8 +480,8 @@
       <div class="summary" style="grid-template-columns: repeat(4, 1fr); border-bottom:none;">
         <div class="kpi-card"><div class="kpi-label">広告費</div><div class="kpi-value" id="lpTotalSpend">¥0</div></div>
         <div class="kpi-card"><div class="kpi-label">売上</div><div class="kpi-value" id="lpTotalRevenue">¥0</div></div>
-        <div class="kpi-card"><div class="kpi-label">ROAS（売上÷広告費）</div><div class="kpi-value" id="lpTotalRoas">-</div></div>
-        <div class="kpi-card"><div class="kpi-label">CPA（広告費÷購入数）</div><div class="kpi-value" id="lpTotalCpa">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">ROAS（広告経由の売上÷広告費）</div><div class="kpi-value" id="lpTotalRoas">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">CPA（広告費÷広告経由の購入数）</div><div class="kpi-value" id="lpTotalCpa">-</div></div>
         <div class="kpi-card"><div class="kpi-label">訪問数</div><div class="kpi-value" id="lpTotalSessions">0</div></div>
         <div class="kpi-card"><div class="kpi-label">購入数</div><div class="kpi-value" id="lpTotalPurchases">0</div></div>
         <div class="kpi-card"><div class="kpi-label">購入率（購入数÷訪問数）</div><div class="kpi-value" id="lpTotalCvr">0%</div></div>
@@ -2034,12 +2034,13 @@
         if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0 };
         return byKey[key];
       };
-      let tS = 0, tP = 0, tR = 0, tSpend = 0;
+      let tS = 0, tP = 0, tR = 0, tSpend = 0, adR = 0, adP = 0;
       filtered.forEach(row => {
         const r = get(row['LP'] || '', row['流入区分'] || '');
         r.sessions += num(row, '訪問数'); r.views += num(row, 'PV');
         r.purchases += num(row, '購入数'); r.revenue += num(row, '売上(¥)');
         tS += num(row, '訪問数'); tP += num(row, '購入数'); tR += num(row, '売上(¥)');
+        if (row['流入区分'] === 'Google広告' || row['流入区分'] === 'Meta広告') { adR += num(row, '売上(¥)'); adP += num(row, '購入数'); }
       });
       spendRows.forEach(row => {
         const r = get(row['LP'] || '', row['媒体'] || '');
@@ -2052,8 +2053,8 @@
       document.getElementById('lpTotalCvr').textContent = cvr(tP, tS);
       document.getElementById('lpTotalRevenue').textContent = yen(tR);
       document.getElementById('lpTotalSpend').textContent = yen(tSpend);
-      document.getElementById('lpTotalRoas').textContent = tSpend > 0 ? (tR / tSpend).toFixed(2) + '倍' : '-';
-      document.getElementById('lpTotalCpa').textContent = tSpend > 0 && tP > 0 ? yen(tSpend / tP) : '-';
+      document.getElementById('lpTotalRoas').textContent = tSpend > 0 ? (adR / tSpend).toFixed(2) + '倍' : '-';
+      document.getElementById('lpTotalCpa').textContent = tSpend > 0 && adP > 0 ? yen(tSpend / adP) : '-';
       document.getElementById('lpTotalAov').textContent = tP > 0 ? yen(tR / tP) : '-';
 
       const tbody = document.getElementById('lpTable');
