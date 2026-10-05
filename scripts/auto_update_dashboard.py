@@ -501,6 +501,153 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
 else:
     print("  ⚠ Meta Ads credentials not fully configured — spend will be 0")
 
+# ===== LP別 広告費（広告の遷移先URLから自動で振り分け）=====
+# 遷移先URLが  https://ouca.today/lp?u=<LP名>  → その LP名 / https://ouca.today/shop... → 「ショップ」
+# 読み取れない広告は「URL不明」（広告費を黙って他へ混ぜない）。
+print("\n🧭 Allocating ad spend to LPs by destination URL...")
+from urllib.parse import urlparse, parse_qs
+
+def lp_from_url(url):
+    url = (url or '').strip()
+    if not url:
+        return 'URL不明'
+    try:
+        u = urlparse(url)
+    except Exception:
+        return 'URL不明'
+    path = (u.path or '').rstrip('/')
+    if path == '/lp':
+        v = parse_qs(u.query).get('u', [''])[0].strip()
+        return v or 'LP（名前不明）'
+    if path.startswith('/shop') or path == '':
+        return 'ショップ'
+    return 'ショップ以外のURL'
+
+lp_spend_map = {}   # (date, platform, lp) -> {'spend','clicks','impressions'}
+
+def _add_lp_spend(date, platform, lp, spend, clicks, impressions):
+    k = (date, platform, lp)
+    r = lp_spend_map.setdefault(k, {'spend': 0.0, 'clicks': 0, 'impressions': 0})
+    r['spend'] += spend
+    r['clicks'] += clicks
+    r['impressions'] += impressions
+
+# ----- Google Ads -----
+if 'ga_ads_service' in globals():
+    try:
+        camp_lps = defaultdict(set)              # campaign -> set(LP)
+        covered = defaultdict(lambda: [0.0, 0, 0])  # (date, campaign) -> spend/clicks/impr 取得済み分
+        queries = [
+            ("ad_group_ad", f"""
+                SELECT segments.date, campaign.name, ad_group_ad.ad.final_urls,
+                       metrics.cost_micros, metrics.clicks, metrics.impressions
+                FROM ad_group_ad
+                WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}' AND metrics.cost_micros > 0
+            """, lambda row: list(row.ad_group_ad.ad.final_urls)),
+            ("asset_group", f"""
+                SELECT segments.date, campaign.name, asset_group.final_urls,
+                       metrics.cost_micros, metrics.clicks, metrics.impressions
+                FROM asset_group
+                WHERE segments.date BETWEEN '{gads_start}' AND '{gads_end}' AND metrics.cost_micros > 0
+            """, lambda row: list(row.asset_group.final_urls)),
+        ]
+        for label, gaql_lp, get_urls in queries:
+            n = 0
+            try:
+                for batch in ga_ads_service.search_stream(customer_id=GOOGLE_ADS_CUSTOMER_ID, query=gaql_lp):
+                    for row in batch.results:
+                        urls = get_urls(row)
+                        lp = lp_from_url(urls[0]) if urls else 'URL不明'
+                        d = row.segments.date.replace('-', '')
+                        sp = row.metrics.cost_micros / 1_000_000
+                        _add_lp_spend(d, 'Google広告', lp, sp, row.metrics.clicks, row.metrics.impressions)
+                        camp_lps[row.campaign.name].add(lp)
+                        c = covered[(d, row.campaign.name)]
+                        c[0] += sp; c[1] += row.metrics.clicks; c[2] += row.metrics.impressions
+                        n += 1
+                print(f"  ✓ Google Ads {label}: {n} rows with destination URL")
+            except Exception as e:
+                print(f"  ✗ Google Ads {label} URL query error: {e}")
+        # 取得できなかった差分（検索・P-Max以外の種別など）は、そのキャンペーンのLPが1つに決まるときだけそこへ、なければ「URL不明」
+        resid = 0.0
+        for row in google_ads_campaign_data:
+            cov = covered.get((row['date'], row['campaign']), [0.0, 0, 0])
+            ds = row['spend'] - cov[0]
+            if ds >= 1:
+                lps = camp_lps.get(row['campaign'], set())
+                lp = next(iter(lps)) if len(lps) == 1 else 'URL不明'
+                _add_lp_spend(row['date'], 'Google広告', lp, ds, max(0, row['clicks'] - cov[1]), max(0, row['impressions'] - cov[2]))
+                resid += ds
+        print(f"  ✓ Google Ads residual (no URL on ad/asset group): ¥{resid:,.0f}")
+    except Exception as e:
+        print(f"  ✗ Google Ads LP allocation error: {e}")
+else:
+    print("  - Google Ads not configured; skipping")
+
+# ----- Meta -----
+def _meta_creative_url(c):
+    oss = c.get('object_story_spec') or {}
+    for k in ('link_data', 'video_data', 'photo_data', 'template_data'):
+        d = oss.get(k) or {}
+        if d.get('link'):
+            return d['link']
+        cta = (d.get('call_to_action') or {}).get('value') or {}
+        if cta.get('link'):
+            return cta['link']
+    for lu in (c.get('asset_feed_spec') or {}).get('link_urls') or []:
+        if lu.get('website_url'):
+            return lu['website_url']
+    return ''
+
+if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
+    try:
+        meta_rows = []
+        nxt = f"https://graph.facebook.com/v21.0/act_{META_AD_ACCOUNT_ID}/insights"
+        prm = {
+            'fields': 'ad_id,spend,clicks,impressions',
+            'level': 'ad',
+            'time_range': json.dumps({'since': (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'), 'until': datetime.now().strftime('%Y-%m-%d')}),
+            'time_increment': 1, 'limit': 500, 'access_token': META_ACCESS_TOKEN,
+        }
+        while nxt:
+            resp = requests.get(nxt, params=prm, timeout=30)
+            _meta_check(resp)
+            pl = resp.json()
+            meta_rows.extend(pl.get('data', []))
+            nxt = pl.get('paging', {}).get('next'); prm = None
+        ad_ids = sorted({r['ad_id'] for r in meta_rows if r.get('ad_id')})
+        ad_lp = {}
+        no_url = 0
+        for i in range(0, len(ad_ids), 40):
+            chunk = ad_ids[i:i + 40]
+            try:
+                rr = requests.get("https://graph.facebook.com/v21.0/", params={
+                    'ids': ','.join(chunk),
+                    'fields': 'creative{object_story_spec,asset_feed_spec}',
+                    'access_token': META_ACCESS_TOKEN}, timeout=30)
+                _meta_check(rr)
+                for aid, obj in rr.json().items():
+                    u = _meta_creative_url((obj or {}).get('creative') or {})
+                    ad_lp[aid] = lp_from_url(u)
+                    if not u:
+                        no_url += 1
+            except Exception as e:
+                print(f"  ✗ Meta creative URL fetch error (chunk {i // 40}): {e}")
+        for r in meta_rows:
+            _add_lp_spend(r['date_start'].replace('-', ''), 'Meta広告', ad_lp.get(r.get('ad_id'), 'URL不明'),
+                          float(r.get('spend', 0)), int(r.get('clicks', 0)), int(r.get('impressions', 0)))
+        print(f"  ✓ Meta: {len(ad_ids)} ads, {no_url} without readable destination URL")
+    except Exception as e:
+        print(f"  ✗ Meta LP allocation error: {e}")
+else:
+    print("  - Meta not configured; skipping")
+
+_tot = defaultdict(float)
+for (_d, _pf, _lp), _v in lp_spend_map.items():
+    _tot[(_pf, _lp)] += _v['spend']
+for (_pf, _lp), _sp in sorted(_tot.items()):
+    print(f"    {_pf} / {_lp}: ¥{_sp:,.0f}")
+
 # ===== PROCESS GA4 DATA =====
 print("\n📈 Processing GA4 data...")
 
@@ -1211,6 +1358,26 @@ for (d_, lp_, b_), v_ in sorted(lp_map.items()):
     ])
 ws_lp.append_rows(rows_lp)
 print(f"  ✓ {len(rows_lp) - 1} rows written to LP別 sheet")
+
+# ===== CREATE/UPDATE LP AD-SPEND SHEET =====
+print("\n💾 Updating LP ad-spend sheet...")
+
+sheet_name_lpspend = 'LP別_広告費'
+try:
+    ws_lpspend = sheet.worksheet(sheet_name_lpspend)
+    ws_lpspend.clear()
+except:
+    ws_lpspend = sheet.add_worksheet(sheet_name_lpspend, rows=6000, cols=8)
+
+rows_lpspend = [['日付', '媒体', 'LP', '広告費(¥)', 'クリック数', '表示回数', '更新日時']]
+_now_lps = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+for (d_, pf_, lp_), v_ in sorted(lp_spend_map.items()):
+    rows_lpspend.append([
+        datetime.strptime(d_, '%Y%m%d').strftime('%Y-%m-%d'), pf_, lp_,
+        round(v_['spend'], 0), v_['clicks'], v_['impressions'], _now_lps,
+    ])
+ws_lpspend.append_rows(rows_lpspend)
+print(f"  ✓ {len(rows_lpspend) - 1} rows written to LP別_広告費 sheet")
 
 # ===== CREATE/UPDATE GOOGLE ADS CAMPAIGN SHEET =====
 print("\n💾 Updating Google Ads campaign sheet...")
