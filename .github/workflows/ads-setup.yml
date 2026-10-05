@@ -6,6 +6,7 @@ on:
     paths:
       - 'ads_setup/**'
       - 'scripts/ads_setup.py'
+      - 'scripts/ads_build.py'
       - '.github/workflows/ads-setup.yml'
 
 jobs:
