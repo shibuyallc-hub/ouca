@@ -81,9 +81,9 @@ def run(client, CID, MODE):
         except GoogleAdsException as ex:
             print("FAILED:", label)
             for e in ex.failure.errors:
-                path = '.'.join(f"{p.field_name}[{p.index}]" if p.index is not None and p.HasField('index') else p.field_name
-                                for p in e.location.field_path_elements)
-                print("  -", e.error_code, "|", e.message, "|", path)
+                path = '.'.join(p.field_name + (f"[{p.index}]" if getattr(p, 'index', 0) else '') for p in e.location.field_path_elements)
+                if 'not found' in e.message.lower() and 'campaign' in path: continue   # 後続の連鎖エラーは省略
+                print("  -", str(e.error_code).replace(chr(10), ' '), "|", e.message, "|", path)
             return None
 
     def add_campaign_common(o, key, channel):
@@ -139,7 +139,7 @@ def run(client, CID, MODE):
         name = NAMES[key]
         if name in existing_campaigns: print("SKIP (exists):", name); return
         o = Ops(); c = add_campaign_common(o, key, E.AdvertisingChannelTypeEnum.SEARCH)
-        c.target_cpa.target_cpa_micros = TCPA
+        c.maximize_conversions.target_cpa_micros = TCPA
         c.network_settings.target_google_search = True; c.network_settings.target_search_network = False
         c.network_settings.target_content_network = False; c.network_settings.target_partner_search_network = False
         c.final_url_suffix = SUF_S
