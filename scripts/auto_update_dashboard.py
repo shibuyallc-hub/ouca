@@ -689,6 +689,61 @@ except Exception as e:
     print(f"  ✗ Product data error: {e}")
     product_data = []
 
+
+# ===== FETCH LP BREAKDOWN (GA4 content group = "LP: <lp_id>" / "ショップ") =====
+# コンテンツグループは GTM の content_group 変数で付与（LPなら「LP: lp-xxx」、/shop なら「ショップ」）。
+# 付与前のデータは "(not set)" になるため「未分類（設定前）」として扱う。
+print("\n🧭 Fetching LP breakdown from GA4...")
+
+def lp_label(cg):
+    cg = (cg or '').strip()
+    if cg.startswith('LP:'):
+        return cg[3:].strip() or '(LP名なし)'
+    if cg == 'ショップ':
+        return 'ショップ'
+    if cg in ('', '(not set)'):
+        return '未分類（設定前）'
+    return cg
+
+lp_map = {}
+
+def _lp_row(date, lp, bucket):
+    key = (date, lp, bucket)
+    if key not in lp_map:
+        lp_map[key] = {'sessions': 0, 'views': 0, 'purchases': 0, 'revenue': 0.0}
+    return lp_map[key]
+
+try:
+    req_lp_purchase = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[Dimension(name="date"), Dimension(name="contentGroup"), Dimension(name="sessionDefaultChannelGroup")],
+        metrics=[Metric(name="eventCount"), Metric(name="purchaseRevenue")],
+        dimension_filter=PURCHASE_ONLY_FILTER,
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    for row in ga4_client.run_report(req_lp_purchase).rows:
+        r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value), channel_to_bucket(row.dimension_values[2].value))
+        r['purchases'] += int(float(row.metric_values[0].value))
+        r['revenue'] += float(row.metric_values[1].value)
+    print(f"  ✓ LP purchase records: {len(lp_map)} keys")
+except Exception as e:
+    print(f"  ✗ LP purchase data error: {e}")
+
+try:
+    req_lp_sessions = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[Dimension(name="date"), Dimension(name="contentGroup"), Dimension(name="sessionDefaultChannelGroup")],
+        metrics=[Metric(name="sessions"), Metric(name="screenPageViews")],
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+    )
+    for row in ga4_client.run_report(req_lp_sessions).rows:
+        r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value), channel_to_bucket(row.dimension_values[2].value))
+        r['sessions'] += int(float(row.metric_values[0].value))
+        r['views'] += int(float(row.metric_values[1].value))
+    print(f"  ✓ LP session records merged: {len(lp_map)} keys total")
+except Exception as e:
+    print(f"  ✗ LP session data error: {e}")
+
 # ===== FETCH AGE/GENDER BREAKDOWN (GA4 FALLBACK, ADS TRAFFIC ONLY) =====
 # This is only used as a fallback per platform when that platform's own ad
 # API doesn't return demographic data (e.g. Google Ads age_range_view /
@@ -1136,6 +1191,26 @@ for item in sorted(product_data, key=lambda x: (x['date'], -x['revenue'])):
 
 ws_product.append_rows(rows_product)
 print(f"  ✓ {len(product_data)} rows written to 商品別 sheet")
+
+# ===== CREATE/UPDATE LP SHEET =====
+print("\n💾 Updating LP sheet...")
+
+sheet_name_lp = 'LP別'
+try:
+    ws_lp = sheet.worksheet(sheet_name_lp)
+    ws_lp.clear()
+except:
+    ws_lp = sheet.add_worksheet(sheet_name_lp, rows=6000, cols=9)
+
+rows_lp = [['日付', 'LP', '流入区分', '訪問数', 'PV', '購入数', '売上(¥)', '更新日時']]
+_now_lp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+for (d_, lp_, b_), v_ in sorted(lp_map.items()):
+    rows_lp.append([
+        datetime.strptime(d_, '%Y%m%d').strftime('%Y-%m-%d'), lp_, b_,
+        v_['sessions'], v_['views'], v_['purchases'], round(v_['revenue'], 0), _now_lp,
+    ])
+ws_lp.append_rows(rows_lp)
+print(f"  ✓ {len(rows_lp) - 1} rows written to LP別 sheet")
 
 # ===== CREATE/UPDATE GOOGLE ADS CAMPAIGN SHEET =====
 print("\n💾 Updating Google Ads campaign sheet...")

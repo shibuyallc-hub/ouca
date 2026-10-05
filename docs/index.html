@@ -121,6 +121,7 @@
         <button class="sheet-tab" onclick="switchSheet('summary')">📈 サマリー</button>
         <button class="sheet-tab" onclick="switchSheet('traffic')">🌐 流入・PV</button>
         <button class="sheet-tab" onclick="switchSheet('product')">🛍️ 商品別</button>
+        <button class="sheet-tab" onclick="switchSheet('lp')">🧭 LP別</button>
         <button class="sheet-tab" onclick="switchSheet('detail')">🔎 詳細分析</button>
         <button class="sheet-tab" onclick="switchSheet('weekly')">📅 週次レポート</button>
       </div>
@@ -462,6 +463,53 @@
       </div>
     </div>
 
+    <div id="lp" class="sheet-content">
+      <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※GA4のコンテンツグループ（LPごとの識別名）で集計しています。「ショップ」は既存の /shop、「未分類（設定前）」はLP別の計測を入れる前のデータです。広告費・ROASは今後追加予定です。選択期間はページ上部の日付範囲に連動します。</p>
+      <div class="controls">
+        <div class="control-group">
+          <label>🧭 流入区分</label>
+          <select id="lpChannel">
+            <option value="ALL">すべて</option>
+            <option value="Google広告">Google広告</option>
+            <option value="Meta広告">Meta広告</option>
+            <option value="その他">その他（自然流入など）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="summary" style="grid-template-columns: repeat(4, 1fr); border-bottom:none;">
+        <div class="kpi-card"><div class="kpi-label">訪問数</div><div class="kpi-value" id="lpTotalSessions">0</div></div>
+        <div class="kpi-card"><div class="kpi-label">購入数</div><div class="kpi-value" id="lpTotalPurchases">0</div></div>
+        <div class="kpi-card"><div class="kpi-label">購入率（購入数÷訪問数）</div><div class="kpi-value" id="lpTotalCvr">0%</div></div>
+        <div class="kpi-card"><div class="kpi-label">売上</div><div class="kpi-value" id="lpTotalRevenue">¥0</div></div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>週別 売上（LP別）</h3>
+          <canvas id="lpWeeklyChart"></canvas>
+          <div class="chart-legend" id="lpWeeklyLegend"></div>
+        </div>
+        <div class="chart-card">
+          <h3>月別 売上（LP別）</h3>
+          <canvas id="lpMonthlyChart"></canvas>
+          <div class="chart-legend" id="lpMonthlyLegend"></div>
+        </div>
+      </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 15px;">🧭 LP別 実績（選択期間）</h2>
+        <table>
+          <thead>
+            <tr><th>LP</th><th>流入区分</th><th>訪問数</th><th>PV</th><th>購入数</th><th>購入率</th><th>売上(¥)</th><th>客単価(¥)</th></tr>
+          </thead>
+          <tbody id="lpTable">
+            <tr><td colspan="8" style="text-align:center;padding:40px;">読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="detail" class="sheet-content">
       <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※このタブは広告経由（Google広告・Meta広告）のアクセスのみを対象にした分析です。選択期間はページ上部の日付範囲に連動します。</p>
 
@@ -655,6 +703,7 @@
     let allAdsData = [];
     let allTrafficData = [];
     let allProductData = [];
+    let allLpData = [];
     let allPageData = [];
     let allGoogleCampaignData = [];
     let allMetaAdData = [];
@@ -810,6 +859,7 @@
         renderAdsTab();
         renderTrafficTab();
         renderProductTab();
+        renderLpTab();
         renderGoogleCampaignTab();
         renderMetaAdTab();
         renderDetailTab();
@@ -954,10 +1004,11 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, lpCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
+          fetch(sheetCsvUrl('LP別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('ページ別行動')).then(r => r.text()),
           fetch(sheetCsvUrl('Google_キャンペーン別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('Meta_広告別')).then(r => r.text()).catch(() => ''),
@@ -971,6 +1022,7 @@
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
         allProductData = parseCSV(productCsv);
+        allLpData = parseCSV(lpCsv);
         allPageData = parseCSV(pageCsv);
         allGoogleCampaignData = parseCSV(gCampCsv);
         allMetaAdData = parseCSV(metaAdCsv);
@@ -984,6 +1036,7 @@
         renderAdsTab();
         renderTrafficTab();
         renderProductTab();
+        renderLpTab();
         renderGoogleCampaignTab();
         renderMetaAdTab();
         renderDetailTab();
@@ -1945,14 +1998,84 @@
       ]);
     }
 
+
+    // ===================== LP TAB =====================
+    const LP_COLORS = ['#2e7d32', '#ec6c00', '#1565c0', '#8e24aa', '#6d4c41', '#00838f'];
+    function renderLpTab() {
+      const range = currentRange;
+      if (!range) return;
+      const channelFilter = document.getElementById('lpChannel').value;
+
+      const filtered = allLpData.filter(row => {
+        const dateOk = inRange(row['日付'], range.start, range.end);
+        const chOk = channelFilter === 'ALL' || row['流入区分'] === channelFilter;
+        return dateOk && chOk;
+      });
+
+      const num = (row, k) => parseFloat(row[k]) || 0;
+      const cvr = (p, v) => v > 0 ? (p / v * 100).toFixed(2) + '%' : '-';
+      let tS = 0, tP = 0, tR = 0;
+      const byKey = {};
+      filtered.forEach(row => {
+        tS += num(row, '訪問数'); tP += num(row, '購入数'); tR += num(row, '売上(¥)');
+        const key = (row['LP'] || '') + '||' + (row['流入区分'] || '');
+        if (!byKey[key]) byKey[key] = { lp: row['LP'] || '', channel: row['流入区分'] || '', sessions: 0, views: 0, purchases: 0, revenue: 0 };
+        byKey[key].sessions += num(row, '訪問数');
+        byKey[key].views += num(row, 'PV');
+        byKey[key].purchases += num(row, '購入数');
+        byKey[key].revenue += num(row, '売上(¥)');
+      });
+
+      document.getElementById('lpTotalSessions').textContent = formatNumber(tS);
+      document.getElementById('lpTotalPurchases').textContent = formatNumber(tP);
+      document.getElementById('lpTotalCvr').textContent = cvr(tP, tS);
+      document.getElementById('lpTotalRevenue').textContent = '¥' + formatNumber(tR);
+
+      const tbody = document.getElementById('lpTable');
+      tbody.innerHTML = '';
+      const rows = Object.values(byKey).sort((a, b) => b.revenue - a.revenue || b.sessions - a.sessions);
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>¥${formatNumber(r.revenue)}</td><td>${r.purchases > 0 ? '¥' + formatNumber(r.revenue / r.purchases) : '-'}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;">選択期間のデータがありません（「LP別」シートが未作成の場合は、先にデータ更新を実行してください）</td></tr>';
+      }
+
+      // 週別・月別の売上（LPごとの系列）
+      const lps = [...new Set(filtered.map(r => r['LP'] || ''))].filter(Boolean);
+      lps.sort((a, b) => {
+        const sum = lp => filtered.filter(r => r['LP'] === lp).reduce((x, r) => x + num(r, '売上(¥)'), 0);
+        return sum(b) - sum(a);
+      });
+      const draw = (canvasId, legendId, periodFn) => {
+        const labelSet = new Set();
+        const perLp = lps.map(lp => {
+          const g = groupByPeriod(filtered.filter(r => r['LP'] === lp), '日付', ['売上(¥)'], periodFn, 0);
+          g.forEach(x => labelSet.add(x.key));
+          return { lp, map: Object.fromEntries(g.map(x => [x.key, x['売上(¥)']])) };
+        });
+        const labels = [...labelSet].sort().slice(-12);
+        drawMultiBarChart(canvasId, labels.map(shortLabel), perLp.map((p, i) => ({
+          name: p.lp, color: LP_COLORS[i % LP_COLORS.length], values: labels.map(l => p.map[l] || 0),
+        })));
+        document.getElementById(legendId).innerHTML = perLp.map((p, i) => `<span><i style="background:${LP_COLORS[i % LP_COLORS.length]}"></i>${p.lp}</span>`).join('');
+      };
+      draw('lpWeeklyChart', 'lpWeeklyLegend', weekKey);
+      draw('lpMonthlyChart', 'lpMonthlyLegend', monthKey);
+    }
+
     document.getElementById('platform').addEventListener('change', renderAdsTab);
     document.getElementById('productChannel').addEventListener('change', renderProductTab);
+    document.getElementById('lpChannel').addEventListener('change', renderLpTab);
     document.getElementById('trafficChannelFilter').addEventListener('change', renderTrafficTab);
     document.getElementById('detailPlatformFilter').addEventListener('change', renderDetailTab);
 
     function resetFilters() {
       document.getElementById('platform').value = 'ALL';
       document.getElementById('productChannel').value = 'ALL';
+      document.getElementById('lpChannel').value = 'ALL';
       document.getElementById('trafficChannelFilter').value = 'ALL';
       document.getElementById('detailPlatformFilter').value = 'ALL';
       if (globalRangeController) globalRangeController.applyPreset('last30');
