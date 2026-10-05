@@ -255,6 +255,33 @@ def run(client, CID, MODE):
     AMZ = ['B0CLHXWZ9J', 'B01N0H2P1S', 'B0CXPRX8Q2', 'B000T9IM48', 'B078YNB1XG', 'B0BYJLWV6D']
     ct = E.CustomAudienceTypeEnum
     signal('P-Max_LP1_AG1', 'adsx_LP1_検索語', [('kw', k) for k in ['酪酸菌 サプリ', '短鎖脂肪酸 サプリ', '腸活 サプリ', '酪酸サプリ']], ct.SEARCH)
-    signal('P-Max_LP1_AG1', 'adsx_LP1_競合URL', [('url', 'https://www.amazon.co.jp/dp/' + a) for a in AMZ], ct.INTEREST)
     signal('P-Max_LP2_AG1', 'adsx_LP2_検索語', [('kw', k) for k in ['高級 サプリ', '経営者 サプリ', 'ハイエンド サプリメント', '経営者 健康 サプリ']], ct.SEARCH)
+
+    # ---------- LP1のオーディエンス：検索語 + 競合ページURL を1つのカスタムオーディエンスにまとめる ----------
+    # （アセットグループに設定できるオーディエンスは1つのため）
+    COMP_URLS = ['https://www.amazon.co.jp/dp/' + a for a in AMZ] + [
+        'https://item.rakuten.co.jp/nayamikaiketsulab/bifiral_r_parent/',   # ビフィラル（悩み解決ラボ公式・楽天）
+        'https://www.rakuten.co.jp/borra-brand/',                           # ボラケア（BORRA公式・楽天）
+        'https://www.qoo10.jp/shop/borra-brand',                            # ボラケア（BORRA公式・Qoo10）
+        'https://wowma.jp/user/1430455/sp/ogaland/',                        # オーガランド（公式ショップ・au PAYマーケット）
+        'https://www.cosme.net/products/2913769/',                          # ラクティス（@cosme）
+    ]
+    try:
+        rows = q("SELECT custom_audience.resource_name FROM custom_audience WHERE custom_audience.name = 'adsx_LP1_検索語'")
+        if rows:
+            op = client.get_type("CustomAudienceOperation"); ca = op.update; ca.resource_name = rows[0].custom_audience.resource_name
+            for kw in ['酪酸菌 サプリ', '短鎖脂肪酸 サプリ', '腸活 サプリ', '酪酸サプリ']:
+                m = client.get_type("CustomAudienceMember"); m.member_type = E.CustomAudienceMemberTypeEnum.KEYWORD; m.keyword = kw; ca.members.append(m)
+            for u in COMP_URLS:
+                m = client.get_type("CustomAudienceMember"); m.member_type = E.CustomAudienceMemberTypeEnum.URL; m.url = u; ca.members.append(m)
+            from google.api_core import protobuf_helpers
+            client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, ca._pb))
+            client.get_service("CustomAudienceService").mutate_custom_audiences(customer_id=CID, operations=[op])
+            print("LP1 audience updated: keywords 4 + URLs", len(COMP_URLS))
+        # 使わない単独の競合URLオーディエンスを削除
+        for r in q("SELECT custom_audience.resource_name FROM custom_audience WHERE custom_audience.name = 'adsx_LP1_競合URL'"):
+            op = client.get_type("CustomAudienceOperation"); op.remove = r.custom_audience.resource_name
+            client.get_service("CustomAudienceService").mutate_custom_audiences(customer_id=CID, operations=[op]); print("removed standalone competitor audience")
+    except GoogleAdsException as ex:
+        print("audience update FAILED:", [(str(e.error_code).replace(chr(10), ' '), e.message) for e in ex.failure.errors][:4])
     print("done")
