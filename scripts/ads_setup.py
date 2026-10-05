@@ -99,6 +99,31 @@ if MODE == 'inspect':
     sys.exit(0)
 
 
+if MODE == 'verify':
+    names = ('検索_LP1', '検索_LP2_高価格・経営者', 'P-Max_LP1', 'P-Max_LP2')
+    print("== campaigns ==")
+    for r in q("SELECT campaign.name, campaign.status, campaign.primary_status, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.final_url_suffix, campaign_budget.amount_micros FROM campaign WHERE campaign.status != 'REMOVED'"):
+        if r.campaign.name in names or r.campaign.name.startswith(('OUCA', 'ouca')):
+            c = r.campaign
+            print(c.name, c.status.name, c.primary_status.name, c.bidding_strategy_type.name, 'tCPA=', c.maximize_conversions.target_cpa_micros // 1_000_000, 'budget=', r.campaign_budget.amount_micros // 1_000_000)
+    print("== ad groups / keywords ==")
+    for r in q("SELECT campaign.name, ad_group.name, ad_group.status FROM ad_group WHERE campaign.name IN ('検索_LP1','検索_LP2_高価格・経営者') AND ad_group.status != 'REMOVED'"):
+        print(r.campaign.name, '|', r.ad_group.name, r.ad_group.status.name)
+    n = {}
+    for r in q("SELECT campaign.name, ad_group_criterion.keyword.text FROM ad_group_criterion WHERE campaign.name IN ('検索_LP1','検索_LP2_高価格・経営者') AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.status != 'REMOVED'"):
+        n[r.campaign.name] = n.get(r.campaign.name, 0) + 1
+    print("keywords:", n)
+    print("== ads (policy) ==")
+    for r in q("SELECT campaign.name, ad_group.name, ad_group_ad.status, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status, ad_group_ad.ad_strength FROM ad_group_ad WHERE campaign.name IN ('検索_LP1','検索_LP2_高価格・経営者') AND ad_group_ad.status != 'REMOVED'"):
+        a = r.ad_group_ad
+        print(r.campaign.name, '|', r.ad_group.name, a.status.name, a.policy_summary.approval_status.name, a.policy_summary.review_status.name, a.ad_strength.name)
+    print("== asset groups ==")
+    for r in q("SELECT campaign.name, asset_group.name, asset_group.status, asset_group.primary_status, asset_group.ad_strength, asset_group.final_urls FROM asset_group WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2')"):
+        g = r.asset_group
+        print(r.campaign.name, g.name, g.status.name, g.primary_status.name, g.ad_strength.name, list(g.final_urls))
+    for r in q("SELECT asset_group.name, asset_group_signal.audience.audience FROM asset_group_signal WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2')"):
+        print('signal', r.asset_group.name, r.asset_group_signal.audience.audience)
+    sys.exit(0)
 if MODE in ('apply', 'cleanup'):
     import ads_build
     ads_build.run(client, CID, MODE)
