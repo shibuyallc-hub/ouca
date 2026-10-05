@@ -1,5 +1,6 @@
 """Google広告の新構成を「一時停止」状態で作成する。mode: inspect / validate / apply"""
 import os, sys, json
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from google.ads.googleads.client import GoogleAdsClient
 
 MODE = sys.argv[1].strip() if len(sys.argv) > 1 else 'inspect'
@@ -96,4 +97,10 @@ if MODE == 'inspect':
                  ('custom audiences',custaud),('extension assets',ext_assets),('existing negatives',existing_neg),('geo/lang',geo_lang),('ad groups',adgroups)]:
         section(t, f)
     sys.exit(0)
-print("unknown mode", MODE)
+
+
+if MODE in ('apply', 'cleanup'):
+    import ads_build
+    ads_build.run(client, CID, MODE)
+else:
+    print("unknown mode", MODE)
