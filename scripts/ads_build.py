@@ -189,7 +189,7 @@ def run(client, CID, MODE):
         o = Ops(); c = add_campaign_common(o, key, E.AdvertisingChannelTypeEnum.PERFORMANCE_MAX)
         client.copy_from(c.maximize_conversions, client.get_type("MaximizeConversions"))
         c.final_url_suffix = SUF_P
-        for t in ('FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION', 'TEXT_ASSET_AUTOMATION', 'GENERATE_LANDING_PAGE_TEXT',
+        for t in ('FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION', 'TEXT_ASSET_AUTOMATION',
                   'GENERATE_IMAGE_ENHANCEMENT', 'GENERATE_IMAGE_EXTRACTION', 'GENERATE_DESIGN_VERSIONS_FOR_IMAGES'):
             s = client.get_type("Campaign").AssetAutomationSetting()
             s.asset_automation_type = getattr(E.AssetAutomationTypeEnum, t); s.asset_automation_status = E.AssetAutomationStatusEnum.OPTED_OUT
