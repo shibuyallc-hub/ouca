@@ -181,6 +181,26 @@ if MODE == 'age_report':
         m = r.metrics
         print('GEN|', r.campaign.name, '|', r.ad_group_criterion.gender.type_.name, '|', m.impressions, '|', m.clicks, '|', round(m.cost_micros/1e6), '|', m.conversions)
     sys.exit(0)
+if MODE == 'age_excl':
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    cid = {r.campaign.name: r.campaign.id for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}
+    for cname in ('検索_LP2_高価格・経営者', 'P-Max_LP2'):
+        if cname not in cid: print('SKIP no campaign', cname); continue
+        have = {r.campaign_criterion.age_range.type_.name: r.campaign_criterion.negative for r in q(f"SELECT campaign_criterion.age_range.type, campaign_criterion.negative FROM campaign_criterion WHERE campaign.id = {cid[cname]} AND campaign_criterion.type = 'AGE_RANGE'")}
+        print(cname, 'existing age criteria:', have)
+        for t in ('AGE_RANGE_18_24', 'AGE_RANGE_65_UP'):
+            if have.get(t) is True: print('  already excluded', t); continue
+            op = client.get_type("CampaignCriterionOperation")
+            c = op.create; c.campaign = f"customers/{CID}/campaigns/{cid[cname]}"; c.negative = True
+            c.age_range.type_ = getattr(E.AgeRangeTypeEnum, t)
+            try:
+                client.get_service("CampaignCriterionService").mutate_campaign_criteria(customer_id=CID, operations=[op])
+                print('  OK excluded', t)
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:3]: print('  FAILED', t, '-', e.message)
+        print(cname, 'after:', {r.campaign_criterion.age_range.type_.name: r.campaign_criterion.negative for r in q(f"SELECT campaign_criterion.age_range.type, campaign_criterion.negative FROM campaign_criterion WHERE campaign.id = {cid[cname]} AND campaign_criterion.type = 'AGE_RANGE'")})
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
