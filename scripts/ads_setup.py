@@ -126,7 +126,11 @@ if MODE == 'verify':
     for r in q("SELECT audience.id, audience.name, audience.status, audience.asset_group FROM audience"):
         print('audience', r.audience.id, r.audience.name, r.audience.status.name, r.audience.asset_group)
     sys.exit(0)
-if MODE == 'rebuild':
+if MODE == 'rebuild_search':
+    import ads_build
+    ads_build.run(client, CID, 'cleanup_search')
+    ads_build.run(client, CID, 'apply')
+elif MODE == 'rebuild':
     import ads_build
     ads_build.run(client, CID, 'cleanup')
     ads_build.run(client, CID, 'apply')

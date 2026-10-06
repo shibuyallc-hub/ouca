@@ -23,9 +23,10 @@ def run(client, CID, MODE):
     def q(g): return list(ga.search(customer_id=CID, query=g))
     def cust(x): return f"customers/{CID}/{x}"
 
-    if MODE == 'cleanup':
+    if MODE in ('cleanup', 'cleanup_search'):
+        _targets = set(NAMES.values()) if MODE == 'cleanup' else {NAMES['S1'], NAMES['S2']}
         for r in q("SELECT campaign.id, campaign.name, campaign.status, campaign_budget.resource_name FROM campaign WHERE campaign.status != 'REMOVED'"):
-            if r.campaign.name in NAMES.values():
+            if r.campaign.name in _targets:
                 if r.campaign.status.name != 'PAUSED':
                     print("SKIP (not paused):", r.campaign.name); continue
                 svc = client.get_service("CampaignService"); op = client.get_type("CampaignOperation")
