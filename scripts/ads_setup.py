@@ -252,6 +252,53 @@ if MODE == 'lp2_age_signal':
             if d.age.age_ranges or d.age.include_undetermined:
                 print('after age dim:', [(x.min_age, x.max_age) for x in d.age.age_ranges], 'unknown', d.age.include_undetermined)
     sys.exit(0)
+if MODE == 'headline_fix':
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    OLD, NEW = 'OUCA supplement 公式', 'OUCA supplement'
+    E = client.enums
+    # --- 検索広告（レスポンシブ検索広告）---
+    for r in q("SELECT campaign.name, ad_group.name, ad_group_ad.ad.resource_name, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.status FROM ad_group_ad WHERE campaign.name IN ('検索_LP1','検索_LP2_高価格・経営者') AND ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        ad = r.ad_group_ad.ad; heads = list(ad.responsive_search_ad.headlines)
+        texts = [h.text for h in heads]
+        print('RSA|', r.campaign.name, '|', r.ad_group.name, '|', texts.count(OLD), 'old;', 'has NEW:', NEW in texts)
+        if OLD not in texts: continue
+        op = client.get_type("AdOperation"); u = op.update; u.resource_name = ad.resource_name
+        seen = set()
+        for h in heads:
+            t = NEW if h.text == OLD else h.text
+            if t in seen: print('  duplicate skipped:', t); continue
+            seen.add(t)
+            nh = client.get_type("AdTextAsset"); nh.text = t
+            if h.pinned_field: nh.pinned_field = h.pinned_field
+            u.responsive_search_ad.headlines.append(nh)
+        for dd in ad.responsive_search_ad.descriptions:
+            nd = client.get_type("AdTextAsset"); nd.text = dd.text
+            if dd.pinned_field: nd.pinned_field = dd.pinned_field
+            u.responsive_search_ad.descriptions.append(nd)
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        try:
+            client.get_service("AdService").mutate_ads(customer_id=CID, operations=[op]); print('  OK updated RSA')
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:4]: print('  FAILED', e.message)
+    # --- P-Max ---
+    for r in q("SELECT campaign.name, asset_group.name, asset_group.resource_name, asset_group_asset.resource_name, asset_group_asset.field_type, asset.text_asset.text FROM asset_group_asset WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2') AND asset_group_asset.field_type IN ('HEADLINE','LONG_HEADLINE','DESCRIPTION') AND asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        t = r.asset.text_asset.text
+        if OLD in t:
+            print('PMAX|', r.campaign.name, r.asset_group_asset.field_type.name, t)
+            if r.asset_group_asset.field_type.name != 'HEADLINE' or t != OLD: print('  (not an exact headline match; skipped)'); continue
+            ga_ = client.get_service("GoogleAdsService")
+            ops = []
+            m = client.get_type("MutateOperation"); m.asset_group_asset_operation.remove = r.asset_group_asset.resource_name; ops.append(m)
+            tmp = -1
+            m2 = client.get_type("MutateOperation"); a = m2.asset_operation.create; a.resource_name = client.get_service("AssetService").asset_path(CID, tmp); a.text_asset.text = NEW; ops.append(m2)
+            m3 = client.get_type("MutateOperation"); c = m3.asset_group_asset_operation.create; c.asset_group = r.asset_group.resource_name; c.asset = a.resource_name; c.field_type = E.AssetFieldTypeEnum.HEADLINE; ops.append(m3)
+            try:
+                ga_.mutate(customer_id=CID, mutate_operations=ops); print('  OK replaced P-Max headline')
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:4]: print('  FAILED', e.message)
+    print('done')
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
