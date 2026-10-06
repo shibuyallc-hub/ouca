@@ -126,6 +126,28 @@ if MODE == 'verify':
     for r in q("SELECT audience.id, audience.name, audience.status, audience.asset_group FROM audience"):
         print('audience', r.audience.id, r.audience.name, r.audience.status.name, r.audience.asset_group)
     sys.exit(0)
+if MODE == 'list_neg':
+    print("== campaign negatives ==")
+    for r in q("SELECT campaign.name, campaign.status, campaign_criterion.keyword.text, campaign_criterion.keyword.match_type FROM campaign_criterion WHERE campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD' AND campaign.status != 'REMOVED'"):
+        print('NEG|', r.campaign.name, '|', r.campaign.status.name, '|', r.campaign_criterion.keyword.text, '|', r.campaign_criterion.keyword.match_type.name)
+    print("== adgroup negatives ==")
+    for r in q("SELECT campaign.name, ad_group.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type FROM ad_group_criterion WHERE ad_group_criterion.negative = TRUE AND ad_group_criterion.type = 'KEYWORD' AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED'"):
+        print('AGNEG|', r.campaign.name, '|', r.ad_group.name, '|', r.ad_group_criterion.keyword.text, '|', r.ad_group_criterion.keyword.match_type.name)
+    print("== account negatives ==")
+    try:
+        for r in q("SELECT customer_negative_criterion.keyword.text, customer_negative_criterion.keyword.match_type FROM customer_negative_criterion WHERE customer_negative_criterion.type = 'KEYWORD'"):
+            print('ACCNEG|', r.customer_negative_criterion.keyword.text, '|', r.customer_negative_criterion.keyword.match_type.name)
+    except Exception as e: print('acc err', str(e)[:200])
+    print("== shared sets ==")
+    try:
+        for r in q("SELECT shared_set.name, shared_set.type, shared_set.status, shared_set.member_count FROM shared_set WHERE shared_set.status != 'REMOVED'"):
+            print('SET|', r.shared_set.name, r.shared_set.type.name, r.shared_set.member_count)
+        for r in q("SELECT campaign.name, shared_set.name FROM campaign_shared_set WHERE campaign.status != 'REMOVED' AND campaign_shared_set.status = 'ENABLED'"):
+            print('CAMPSET|', r.campaign.name, '|', r.shared_set.name)
+        for r in q("SELECT shared_set.name, shared_criterion.keyword.text, shared_criterion.keyword.match_type FROM shared_criterion WHERE shared_criterion.type = 'KEYWORD'"):
+            print('SETKW|', r.shared_set.name, '|', r.shared_criterion.keyword.text, '|', r.shared_criterion.keyword.match_type.name)
+    except Exception as e: print('set err', str(e)[:200])
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
