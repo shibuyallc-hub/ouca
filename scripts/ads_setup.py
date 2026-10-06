@@ -204,9 +204,10 @@ if MODE == 'age_excl':
 if MODE == 'aud_detail':
     print("== asset group signals (audience) ==")
     sig = []
-    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group.id, asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group_signal.audience.audience != ''"):
+    for r in q("SELECT asset_group_signal.resource_name, campaign.name, campaign.status, asset_group.name, asset_group.id, asset_group_signal.audience.audience FROM asset_group_signal"):
         sig.append((r.campaign.name, r.campaign.status.name, r.asset_group.name, r.asset_group.id, r.asset_group_signal.audience.audience))
-    for x in sig: print('SIG|', x)
+    for x in sig:
+        if x[4]: print('SIG|', x)
     for r in q("SELECT audience.resource_name, audience.name, audience.status, audience.dimensions, audience.asset_group FROM audience"):
         a = r.audience
         mem = []
