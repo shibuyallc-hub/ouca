@@ -171,6 +171,16 @@ if MODE == 'add_themes':
             except GoogleAdsException as ex:
                 for e in ex.failure.errors[:5]: print('  FAILED -', e.message)
     sys.exit(0)
+if MODE == 'age_report':
+    print("== age_range_view (2026-09-01..2026-10-06) ==")
+    for r in q("SELECT campaign.name, ad_group_criterion.age_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM age_range_view WHERE segments.date BETWEEN '2026-09-01' AND '2026-10-06'"):
+        m = r.metrics
+        print('AGE|', r.campaign.name, '|', r.ad_group_criterion.age_range.type_.name, '|', m.impressions, '|', m.clicks, '|', round(m.cost_micros/1e6), '|', m.conversions)
+    print("== gender ==")
+    for r in q("SELECT campaign.name, ad_group_criterion.gender.type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM gender_view WHERE segments.date BETWEEN '2026-09-01' AND '2026-10-06'"):
+        m = r.metrics
+        print('GEN|', r.campaign.name, '|', r.ad_group_criterion.gender.type_.name, '|', m.impressions, '|', m.clicks, '|', round(m.cost_micros/1e6), '|', m.conversions)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
