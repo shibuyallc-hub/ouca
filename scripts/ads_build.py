@@ -246,8 +246,8 @@ def run(client, CID, MODE):
             if not rows: print("signal: asset group not found", ag_name); return
             ag_rn = rows[0].asset_group.resource_name
             ca_rn = make_custom_audience(aud_name, members, ctype)
-            if q(f"SELECT asset_group_signal.resource_name FROM asset_group_signal WHERE asset_group.resource_name = '{ag_rn}'"): print("signal exists for", ag_name); return
-            aop = client.get_type("AudienceOperation"); au = aop.create; au.name = aud_name + '_v2'
+            if any(r.asset_group.resource_name == ag_rn for r in q("SELECT asset_group.resource_name, asset_group_signal.resource_name FROM asset_group_signal")): print("signal exists for", ag_name); return
+            aop = client.get_type("AudienceOperation"); au = aop.create; au.name = aud_name + '_v2_' + str(int(__import__('time').time()))
             au.scope = E.AudienceScopeEnum.ASSET_GROUP; au.asset_group = ag_rn
             seg = client.get_type("AudienceSegment"); seg.custom_audience.custom_audience = ca_rn
             dim = client.get_type("AudienceDimension"); dim.audience_segments.segments.append(seg); au.dimensions.append(dim)
