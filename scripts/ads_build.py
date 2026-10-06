@@ -242,7 +242,7 @@ def run(client, CID, MODE):
         return client.get_service("CustomAudienceService").mutate_custom_audiences(customer_id=CID, operations=[op]).results[0].resource_name
     def signal(ag_name, aud_name, members, ctype):
         try:
-            rows = q(f"SELECT asset_group.resource_name FROM asset_group WHERE asset_group.name = '{ag_name}' AND asset_group.status != 'REMOVED'")
+            rows = q(f"SELECT asset_group.resource_name FROM asset_group WHERE asset_group.name = '{ag_name}' AND asset_group.status != 'REMOVED' AND campaign.status != 'REMOVED'")
             if not rows: print("signal: asset group not found", ag_name); return
             ag_rn = rows[0].asset_group.resource_name
             ca_rn = make_custom_audience(aud_name, members, ctype)
