@@ -201,6 +201,26 @@ if MODE == 'age_excl':
                 for e in ex.failure.errors[:3]: print('  FAILED', t, '-', e.message)
         print(cname, 'after:', {r.campaign_criterion.age_range.type_.name: r.campaign_criterion.negative for r in q(f"SELECT campaign_criterion.age_range.type, campaign_criterion.negative FROM campaign_criterion WHERE campaign.id = {cid[cname]} AND campaign_criterion.type = 'AGE_RANGE'")})
     sys.exit(0)
+if MODE == 'aud_detail':
+    print("== asset group signals (audience) ==")
+    sig = []
+    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group.id, asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group_signal.audience.audience != ''"):
+        sig.append((r.campaign.name, r.campaign.status.name, r.asset_group.name, r.asset_group.id, r.asset_group_signal.audience.audience))
+    for x in sig: print('SIG|', x)
+    for r in q("SELECT audience.resource_name, audience.name, audience.status, audience.dimensions, audience.asset_group FROM audience"):
+        a = r.audience
+        mem = []
+        for d in a.dimensions:
+            for sgm in d.audience_segments.segments:
+                if sgm.custom_audience.custom_audience: mem.append('custom:' + sgm.custom_audience.custom_audience)
+                if sgm.user_list.user_list: mem.append('userlist:' + sgm.user_list.user_list)
+                if sgm.user_interest.user_interest_category: mem.append('interest:' + sgm.user_interest.user_interest_category)
+            if d.age or d.gender: mem.append('demo')
+        print('AUD|', a.resource_name, '|', a.name, '|', a.status.name, '|', a.asset_group, '|', mem)
+    for r in q("SELECT custom_audience.resource_name, custom_audience.name, custom_audience.status, custom_audience.members FROM custom_audience WHERE custom_audience.status != 'REMOVED'"):
+        c = r.custom_audience
+        print('CUST|', c.resource_name, '|', c.name, '|', c.status.name, '|', [(m.member_type.name, m.keyword or m.url) for m in c.members])
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
