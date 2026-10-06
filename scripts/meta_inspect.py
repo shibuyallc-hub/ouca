@@ -16,3 +16,4 @@ for s in get(f'{ACC}/adsets', {'fields': 'name,status,effective_status,campaign{
 print('== ads ==')
 for a in get(f'{ACC}/ads', {'fields': 'name,status,effective_status,adset{name},creative{object_story_spec,url_tags,call_to_action_type,degrees_of_freedom_spec,authorization_category}', 'limit': 50}):
     print(json.dumps(a, ensure_ascii=False)[:1500])
+# rerun 1791282328
