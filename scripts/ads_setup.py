@@ -124,7 +124,11 @@ if MODE == 'verify':
     for r in q("SELECT asset_group.name, asset_group_signal.audience.audience FROM asset_group_signal WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2')"):
         print('signal', r.asset_group.name, r.asset_group_signal.audience.audience)
     sys.exit(0)
-if MODE in ('apply', 'cleanup'):
+if MODE == 'rebuild':
+    import ads_build
+    ads_build.run(client, CID, 'cleanup')
+    ads_build.run(client, CID, 'apply')
+elif MODE in ('apply', 'cleanup'):
     import ads_build
     ads_build.run(client, CID, MODE)
 else:

@@ -30,7 +30,13 @@ def run(client, CID, MODE):
                     print("SKIP (not paused):", r.campaign.name); continue
                 svc = client.get_service("CampaignService"); op = client.get_type("CampaignOperation")
                 op.remove = f"customers/{CID}/campaigns/{r.campaign.id}"
-                svc.mutate_campaigns(customer_id=CID, operations=[op]); print("removed", r.campaign.name)
+                svc.mutate_campaigns(customer_id=CID, operations=[op]); print("removed campaign", r.campaign.name)
+                try:
+                    bs = client.get_service("CampaignBudgetService"); bop = client.get_type("CampaignBudgetOperation")
+                    bop.remove = r.campaign_budget.resource_name
+                    bs.mutate_campaign_budgets(customer_id=CID, operations=[bop]); print("  removed budget")
+                except GoogleAdsException as ex:
+                    print("  budget not removed:", ex.failure.errors[0].message)
         return
 
     # ---------- 既存情報 ----------
@@ -87,7 +93,7 @@ def run(client, CID, MODE):
     def add_campaign_common(o, key, channel):
         bt, ct = o.tmp(), o.tmp()
         b = o.new('campaign_budget_operation')
-        b.resource_name = ga.campaign_budget_path(CID, bt); b.name = 'adsx_budget_' + NAMES[key]
+        b.resource_name = ga.campaign_budget_path(CID, bt); import time as _t; b.name = 'adsx_budget_' + NAMES[key] + '_' + str(int(_t.time()))
         b.amount_micros = BUDGET[key] * 1_000_000; b.delivery_method = E.BudgetDeliveryMethodEnum.STANDARD
         b.explicitly_shared = False
         c = o.new('campaign_operation')
@@ -133,7 +139,7 @@ def run(client, CID, MODE):
             link_campaign_asset(o, c, a.resource_name, E.AssetFieldTypeEnum.SITELINK)
 
     # ---------- 検索キャンペーン ----------
-    def build_search(key, lp, groups, heads, descs):
+    def build_search(key, lp, groups, heads, descs, brand_heads=None):
         name = NAMES[key]
         if name in existing_campaigns: print("SKIP (exists):", name); return
         o = Ops(); c = add_campaign_common(o, key, E.AdvertisingChannelTypeEnum.SEARCH)
@@ -152,7 +158,8 @@ def run(client, CID, MODE):
                     k.status = E.AdGroupCriterionStatusEnum.ENABLED; k.keyword.text = kw; k.keyword.match_type = mt
             ad = o.new('ad_group_ad_operation'); ad.ad_group = ag.resource_name; ad.status = E.AdGroupAdStatusEnum.ENABLED
             ad.ad.final_urls.append(LP[lp]); r = ad.ad.responsive_search_ad
-            for i, h in enumerate(heads):
+            use_heads = brand_heads if (brand_heads and 'ブランド' in g['ag']) else heads
+            for i, h in enumerate(use_heads):
                 assert wd(h) <= 30, h
                 t = client.get_type("AdTextAsset"); t.text = h
                 if i == 0: t.pinned_field = E.ServedAssetFieldTypeEnum.HEADLINE_1
@@ -167,7 +174,7 @@ def run(client, CID, MODE):
     kw_groups = cfg['KW']
     lp1_groups = [g for g in kw_groups if g['url'] == cfg['LP1']]
     lp2_groups = [g for g in kw_groups if g['url'] == cfg['LP2']]
-    build_search('S1', 'LP1', lp1_groups, cfg['LP1_H'], cfg['LP1_D'])
+    build_search('S1', 'LP1', lp1_groups, cfg['LP1_H'], cfg['LP1_D'], cfg['LP1_H_BRAND'])
     build_search('S2', 'LP2', lp2_groups, cfg['LP2_H'], cfg['LP2_D'])
 
     # ---------- P-Max ----------
@@ -238,9 +245,9 @@ def run(client, CID, MODE):
             rows = q(f"SELECT asset_group.resource_name FROM asset_group WHERE asset_group.name = '{ag_name}' AND asset_group.status != 'REMOVED'")
             if not rows: print("signal: asset group not found", ag_name); return
             ag_rn = rows[0].asset_group.resource_name
-            if q(f"SELECT audience.resource_name FROM audience WHERE audience.name = '{aud_name}'"): print("signal exists:", aud_name); return
             ca_rn = make_custom_audience(aud_name, members, ctype)
-            aop = client.get_type("AudienceOperation"); au = aop.create; au.name = aud_name
+            if q(f"SELECT asset_group_signal.resource_name FROM asset_group_signal WHERE asset_group.resource_name = '{ag_rn}'"): print("signal exists for", ag_name); return
+            aop = client.get_type("AudienceOperation"); au = aop.create; au.name = aud_name + '_v2'
             au.scope = E.AudienceScopeEnum.ASSET_GROUP; au.asset_group = ag_rn
             seg = client.get_type("AudienceSegment"); seg.custom_audience.custom_audience = ca_rn
             dim = client.get_type("AudienceDimension"); dim.audience_segments.segments.append(seg); au.dimensions.append(dim)
