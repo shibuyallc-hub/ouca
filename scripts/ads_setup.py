@@ -222,6 +222,36 @@ if MODE == 'aud_detail':
         c = r.custom_audience
         print('CUST|', c.resource_name, '|', c.name, '|', c.status.name, '|', [(m.member_type.name, m.keyword or m.url) for m in c.members])
     sys.exit(0)
+if MODE == 'lp2_age_signal':
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    rows = list(q("SELECT asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group.id = 6755938081"))
+    aud_rns = [r.asset_group_signal.audience.audience for r in rows if r.asset_group_signal.audience.audience]
+    print('LP2 audiences:', aud_rns)
+    for rn in aud_rns:
+        a = list(q(f"SELECT audience.resource_name, audience.dimensions FROM audience WHERE audience.resource_name = '{rn}'"))[0].audience
+        for i, d in enumerate(a.dimensions):
+            if d.age.age_ranges or d.age.include_undetermined:
+                print('before age dim:', [(x.min_age.type_.name if hasattr(x.min_age,'type_') else x) for x in d.age.age_ranges], 'unknown', d.age.include_undetermined)
+        op = client.get_type("AudienceOperation"); au = op.update; au.resource_name = rn
+        for d in a.dimensions:
+            nd = client.get_type("AudienceDimension")
+            nd.CopyFrom(d)
+            if d.age.age_ranges or d.age.include_undetermined:
+                del nd.age.age_ranges[:]
+                for lo, hi in ((35, 44), (45, 54), (55, 64)):
+                    seg = client.get_type("AgeSegment"); seg.min_age = lo; seg.max_age = hi; nd.age.age_ranges.append(seg)
+            au.dimensions.append(nd)
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, au._pb))
+        try:
+            client.get_service("AudienceService").mutate_audiences(customer_id=CID, operations=[op]); print('OK updated', rn)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:4]: print('FAILED', e.message)
+        b = list(q(f"SELECT audience.dimensions FROM audience WHERE audience.resource_name = '{rn}'"))[0].audience
+        for d in b.dimensions:
+            if d.age.age_ranges or d.age.include_undetermined:
+                print('after age dim:', [(x.min_age, x.max_age) for x in d.age.age_ranges], 'unknown', d.age.include_undetermined)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
