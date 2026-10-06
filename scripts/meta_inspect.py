@@ -7,21 +7,12 @@ def get(path, params):
     r = requests.get(f'https://graph.facebook.com/{V}/{path}', params=p, timeout=60).json()
     if 'error' in r: print('ERROR', path, r['error'].get('message')); return []
     return r.get('data', r)
-print('== ad creatives detail ==')
-for a in get(f'{ACC}/ads', {'fields': 'name,creative{asset_feed_spec,object_story_spec,title,body,link_url,call_to_action_type}', 'limit': 50}):
-    c = a.get('creative', {}); f = c.get('asset_feed_spec', {})
-    print('AD', a['name'])
-    print('  bodies:', [b.get('text') for b in f.get('bodies', [])])
-    print('  titles:', [t.get('text') for t in f.get('titles', [])])
-    print('  descriptions:', [t.get('text') for t in f.get('descriptions', [])])
-    print('  link_urls:', [u.get('website_url') for u in f.get('link_urls', [])], 'cta:', f.get('call_to_action_types'), 'optimization:', f.get('optimization_type'), 'ad_formats:', f.get('ad_formats'))
-    print('  n_images:', len(f.get('images', [])), 'n_videos:', len(f.get('videos', [])))
-print('== pixel ==')
-for p in get(f'{ACC}/adspixels', {'fields': 'id,name,last_fired_time'}): 
-    print(json.dumps(p, ensure_ascii=False))
-    for st in get(f"{p['id']}/stats", {'aggregation': 'event', 'start_time': '2026-09-01'}) if isinstance(p, dict) else []:
-        print('  stats', json.dumps(st, ensure_ascii=False)[:600])
-print('== daily spend (last 20d) ==')
-for i in get(f'{ACC}/insights', {'level': 'account', 'time_increment': 1, 'date_preset': 'last_30d', 'fields': 'spend,impressions,clicks,actions', 'limit': 40}):
-    acts = {x['action_type']: x['value'] for x in i.get('actions', [])} if i.get('actions') else {}
-    print(i['date_start'], i['spend'], i['impressions'], i['clicks'], {k: acts[k] for k in acts if k in ('landing_page_view', 'purchase', 'omni_purchase', 'initiate_checkout', 'omni_initiated_checkout', 'view_content')})
+print('== campaigns ==')
+for c in get(f'{ACC}/campaigns', {'fields': 'name,objective,status,buying_type,special_ad_categories,smart_promotion_type,bid_strategy,daily_budget', 'limit': 50}):
+    print(json.dumps(c, ensure_ascii=False))
+print('== adsets ==')
+for s in get(f'{ACC}/adsets', {'fields': 'name,status,effective_status,campaign{name},daily_budget,optimization_goal,billing_event,bid_strategy,destination_type,attribution_spec,promoted_object,targeting,start_time,end_time', 'limit': 50}):
+    print(json.dumps(s, ensure_ascii=False))
+print('== ads ==')
+for a in get(f'{ACC}/ads', {'fields': 'name,status,effective_status,adset{name},creative{object_story_spec,url_tags,call_to_action_type,degrees_of_freedom_spec,authorization_category}', 'limit': 50}):
+    print(json.dumps(a, ensure_ascii=False)[:1500])
