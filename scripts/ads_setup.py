@@ -121,8 +121,10 @@ if MODE == 'verify':
     for r in q("SELECT campaign.name, asset_group.name, asset_group.status, asset_group.primary_status, asset_group.ad_strength, asset_group.final_urls FROM asset_group WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2') AND campaign.status != 'REMOVED'"):
         g = r.asset_group
         print(r.campaign.name, g.name, g.status.name, g.primary_status.name, g.ad_strength.name, list(g.final_urls))
-    for r in q("SELECT asset_group.name, asset_group_signal.audience.audience FROM asset_group_signal WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2') AND campaign.status != 'REMOVED'"):
-        print('signal', r.asset_group.name, r.asset_group_signal.audience.audience)
+    for r in q("SELECT asset_group.name, asset_group.resource_name, campaign.name, campaign.status, asset_group_signal.resource_name, asset_group_signal.audience.audience FROM asset_group_signal"):
+        print('signal', r.campaign.name, r.campaign.status.name, r.asset_group.name, r.asset_group.resource_name, r.asset_group_signal.audience.audience)
+    for r in q("SELECT audience.id, audience.name, audience.status, audience.asset_group FROM audience"):
+        print('audience', r.audience.id, r.audience.name, r.audience.status.name, r.audience.asset_group)
     sys.exit(0)
 if MODE == 'rebuild':
     import ads_build
