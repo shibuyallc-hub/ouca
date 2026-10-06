@@ -1,0 +1,17 @@
+name: Meta Inspect (read-only)
+on:
+  push:
+    branches: [ads-setup]
+    paths: ['scripts/meta_inspect.py', '.github/workflows/meta-inspect.yml']
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.11' }
+      - run: pip install requests
+      - env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+        run: python scripts/meta_inspect.py
