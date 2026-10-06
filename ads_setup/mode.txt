@@ -1,1 +1,1 @@
-rebuild_search
+verify
