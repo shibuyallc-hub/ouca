@@ -286,7 +286,7 @@ def run(client, CID, MODE):
             client.get_service("CustomAudienceService").mutate_custom_audiences(customer_id=CID, operations=[op])
             print("LP1 audience updated: keywords 4 + URLs", len(COMP_URLS))
         # 使わない単独の競合URLオーディエンスを削除
-        for r in q("SELECT custom_audience.resource_name FROM custom_audience WHERE custom_audience.name = 'adsx_LP1_競合URL'"):
+        for r in q("SELECT custom_audience.resource_name FROM custom_audience WHERE custom_audience.name = 'adsx_LP1_競合URL' AND custom_audience.status != 'REMOVED'"):
             op = client.get_type("CustomAudienceOperation"); op.remove = r.custom_audience.resource_name
             client.get_service("CustomAudienceService").mutate_custom_audiences(customer_id=CID, operations=[op]); print("removed standalone competitor audience")
     except GoogleAdsException as ex:
