@@ -148,6 +148,29 @@ if MODE == 'list_neg':
             print('SETKW|', r.shared_set.name, '|', r.shared_criterion.keyword.text, '|', r.shared_criterion.keyword.match_type.name)
     except Exception as e: print('set err', str(e)[:200])
     sys.exit(0)
+if MODE == 'add_themes':
+    from google.ads.googleads.errors import GoogleAdsException
+    old = {}
+    for r in q("SELECT asset_group.id, asset_group.name, campaign.name, campaign.status, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group_signal.search_theme.text != ''"):
+        old.setdefault((r.campaign.name, r.asset_group.name, r.asset_group.id), []).append(r.asset_group_signal.search_theme.text)
+    for k, v in old.items(): print('THEMES|', k, '|', v)
+    src = [t for k, v in old.items() if k[2] == 6746797318 for t in v]
+    print('source themes:', src)
+    for r in q("SELECT asset_group.resource_name, asset_group.name, campaign.name FROM asset_group WHERE campaign.name IN ('P-Max_LP1','P-Max_LP2') AND campaign.status != 'REMOVED' AND asset_group.status != 'REMOVED'"):
+        have = {t.lower() for k, v in old.items() if k[1] == r.asset_group.name and k[0] == r.campaign.name for t in v}
+        ops = []
+        for t in src:
+            if t.lower() in have: continue
+            op = client.get_type("AssetGroupSignalOperation"); sg = op.create
+            sg.asset_group = r.asset_group.resource_name; sg.search_theme.text = t; ops.append(op)
+        print(r.campaign.name, r.asset_group.name, 'to add:', len(ops))
+        if ops:
+            try:
+                res = client.get_service("AssetGroupSignalService").mutate_asset_group_signals(customer_id=CID, operations=ops)
+                print('  OK', len(res.results))
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:5]: print('  FAILED -', e.message)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
