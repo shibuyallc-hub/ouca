@@ -232,11 +232,11 @@ if MODE == 'lp2_age_signal':
         a = list(q(f"SELECT audience.resource_name, audience.dimensions FROM audience WHERE audience.resource_name = '{rn}'"))[0].audience
         for i, d in enumerate(a.dimensions):
             if d.age.age_ranges or d.age.include_undetermined:
-                print('before age dim:', [(x.min_age.type_.name if hasattr(x.min_age,'type_') else x) for x in d.age.age_ranges], 'unknown', d.age.include_undetermined)
+                print('before age dim:', [(x.min_age, x.max_age) for x in d.age.age_ranges], 'unknown', d.age.include_undetermined)
         op = client.get_type("AudienceOperation"); au = op.update; au.resource_name = rn
         for d in a.dimensions:
             nd = client.get_type("AudienceDimension")
-            nd.CopyFrom(d)
+            client.copy_from(nd, d)
             if d.age.age_ranges or d.age.include_undetermined:
                 del nd.age.age_ranges[:]
                 for lo, hi in ((35, 44), (45, 54), (55, 64)):
