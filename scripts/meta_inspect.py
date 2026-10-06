@@ -7,13 +7,18 @@ def get(path, params):
     r = requests.get(f'https://graph.facebook.com/{V}/{path}', params=p, timeout=60).json()
     if 'error' in r: print('ERROR', path, r['error'].get('message')); return []
     return r.get('data', r)
-print('== campaigns ==')
-for c in get(f'{ACC}/campaigns', {'fields': 'name,objective,status,buying_type,special_ad_categories,smart_promotion_type,bid_strategy,daily_budget', 'limit': 50}):
-    print(json.dumps(c, ensure_ascii=False))
-print('== adsets ==')
-for s in get(f'{ACC}/adsets', {'fields': 'name,status,effective_status,campaign{name},daily_budget,optimization_goal,billing_event,bid_strategy,destination_type,attribution_spec,promoted_object,targeting,start_time,end_time', 'limit': 50}):
-    print(json.dumps(s, ensure_ascii=False))
-print('== ads ==')
-for a in get(f'{ACC}/ads', {'fields': 'name,status,effective_status,adset{name},creative{object_story_spec,url_tags,call_to_action_type,degrees_of_freedom_spec,authorization_category}', 'limit': 50}):
-    print(json.dumps(a, ensure_ascii=False)[:1500])
-# rerun 1791282328
+print('== images ==')
+for i in get(f'{ACC}/adimages', {'fields': 'hash,name,width,height', 'limit': 100}):
+    print('IMG', i.get('hash'), i.get('name'), i.get('width'), i.get('height'))
+print('== ads2 ==')
+for a in get(f'{ACC}/ads', {'fields': 'name,status,effective_status,adset{name,daily_budget},campaign{name},creative{asset_feed_spec,object_story_spec,call_to_action_type,url_tags,title,body}', 'limit': 50}):
+    c = a.get('creative', {}); f = c.get('asset_feed_spec', {}); o = c.get('object_story_spec', {})
+    if 'LP' not in (a.get('campaign') or {}).get('name', ''): continue
+    print('AD', a['name'], a['effective_status'], (a.get('adset') or {}).get('name'), 'page', o.get('page_id'), 'ig', o.get('instagram_user_id'))
+    print('  bodies:', [b.get('text') for b in f.get('bodies', [])])
+    print('  titles:', [t.get('text') for t in f.get('titles', [])])
+    print('  descs:', [t.get('text') for t in f.get('descriptions', [])])
+    print('  links:', [u.get('website_url') for u in f.get('link_urls', [])], 'cta:', f.get('call_to_action_types'), 'fmt:', f.get('ad_formats'), 'opt:', f.get('optimization_type'))
+    print('  images:', [(i.get('hash'), i.get('url_tags')) for i in f.get('images', [])])
+    ld = o.get('link_data')
+    if ld: print('  link_data:', json.dumps(ld, ensure_ascii=False)[:900])
