@@ -134,7 +134,7 @@ elif MODE == 'rebuild':
     import ads_build
     ads_build.run(client, CID, 'cleanup')
     ads_build.run(client, CID, 'apply')
-elif MODE in ('apply', 'cleanup'):
+elif MODE in ('apply', 'cleanup', 'add_kw'):
     import ads_build
     ads_build.run(client, CID, MODE)
 else:

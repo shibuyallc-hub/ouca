@@ -40,6 +40,49 @@ def run(client, CID, MODE):
                     print("  budget not removed:", ex.failure.errors[0].message)
         return
 
+    if MODE == 'add_kw':
+        # 既存の検索キャンペーンに、キーワード（完全一致+フレーズ一致）と除外KW（フレーズ）を追加する。キャンペーンは作り直さない
+        from google.ads.googleads.errors import GoogleAdsException as _GE
+        camp_id = {r.campaign.name: r.campaign.id for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}
+        # 1) キーワード追加
+        for g in cfg['KW']:
+            if g['campaign'] not in camp_id: print("SKIP no campaign", g['campaign']); continue
+            ag = [r for r in q(f"SELECT ad_group.resource_name FROM ad_group WHERE campaign.id = {camp_id[g['campaign']]} AND ad_group.name = '{g['ag']}' AND ad_group.status != 'REMOVED'")]
+            if not ag: print("SKIP no ad group", g['ag']); continue
+            agrn = ag[0].ad_group.resource_name
+            have = {(r.ad_group_criterion.keyword.text.lower(), r.ad_group_criterion.keyword.match_type.name) for r in q(f"SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type FROM ad_group_criterion WHERE ad_group.resource_name = '{agrn}' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'")}
+            ops = []
+            for kw in g['kws']:
+                for mt in (E.KeywordMatchTypeEnum.EXACT, E.KeywordMatchTypeEnum.PHRASE):
+                    if (kw.lower(), mt.name) in have: continue
+                    op = client.get_type("AdGroupCriterionOperation"); k = op.create; k.ad_group = agrn
+                    k.status = E.AdGroupCriterionStatusEnum.ENABLED; k.keyword.text = kw; k.keyword.match_type = mt; ops.append(op)
+            if not ops: print("keywords up to date:", g['ag']); continue
+            try:
+                svc = client.get_service("AdGroupCriterionService")
+                for i in range(0, len(ops), 400): svc.mutate_ad_group_criteria(customer_id=CID, operations=ops[i:i+400])
+                print("OK keywords added:", g['campaign'], '|', g['ag'], len(ops))
+            except _GE as ex:
+                print("FAILED keywords:", g['ag'])
+                for e in ex.failure.errors[:5]: print("  -", e.message)
+        # 2) 除外KW追加（4キャンペーンすべて）
+        for cname in ('検索_LP1', '検索_LP2_高価格・経営者', 'P-Max_LP1', 'P-Max_LP2'):
+            if cname not in camp_id: print("SKIP no campaign", cname); continue
+            have = {r.campaign_criterion.keyword.text.lower() for r in q(f"SELECT campaign_criterion.keyword.text FROM campaign_criterion WHERE campaign.id = {camp_id[cname]} AND campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'")}
+            ops = []
+            for t in cfg['NEG']:
+                if t.lower() in have: continue
+                op = client.get_type("CampaignCriterionOperation"); n = op.create; n.campaign = f"customers/{CID}/campaigns/{camp_id[cname]}"
+                n.negative = True; n.keyword.text = t; n.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; ops.append(op)
+            print(cname, "既存の除外KW:", len(have), "追加:", len(ops))
+            if ops:
+                try:
+                    client.get_service("CampaignCriterionService").mutate_campaign_criteria(customer_id=CID, operations=ops)
+                except _GE as ex:
+                    print("FAILED negatives:", cname)
+                    for e in ex.failure.errors[:5]: print("  -", e.message)
+        return
+
     # ---------- 既存情報 ----------
     existing_campaigns = {r.campaign.name: r.campaign.id for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}
     def load_text_assets():
