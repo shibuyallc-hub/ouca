@@ -305,6 +305,13 @@ if MODE == 'report_data':
         m = r.metrics
         print('GD|', r.segments.date, '|', r.campaign.name, '|', r.campaign.advertising_channel_type.name, '|', round(m.cost_micros/1e6), '|', m.impressions, '|', m.clicks, '|', round(m.conversions, 2), '|', round(m.all_conversions, 2))
     sys.exit(0)
+if MODE == 'old_kw_report':
+    print("== old search ad groups/keywords ==")
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group.status, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status FROM ad_group_criterion WHERE campaign.name = 'OUCA_supplement_search' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED' AND ad_group.status != 'REMOVED'"):
+        print('OK|', r.campaign.status.name, '|', r.ad_group.name, '|', r.ad_group.status.name, '|', r.ad_group_criterion.keyword.text, '|', r.ad_group_criterion.keyword.match_type.name, '|', r.ad_group_criterion.status.name)
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group.status, ad_group.resource_name FROM ad_group WHERE campaign.name = 'OUCA_supplement_search' AND ad_group.status != 'REMOVED'"):
+        print('AG|', r.ad_group.name, r.ad_group.status.name, r.ad_group.resource_name)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
