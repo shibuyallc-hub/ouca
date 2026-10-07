@@ -312,6 +312,41 @@ if MODE == 'old_kw_report':
     for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group.status, ad_group.resource_name FROM ad_group WHERE campaign.name = 'OUCA_supplement_search' AND ad_group.status != 'REMOVED'"):
         print('AG|', r.ad_group.name, r.ad_group.status.name, r.ad_group.resource_name)
     sys.exit(0)
+if MODE == 'old_add':
+    import json as _j
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    lp1 = [k for g in cfg['KW'] if g['url'] == cfg['LP1'] for k in g['kws']]
+    cid = {r.campaign.name: r.campaign.id for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}
+    agr = list(q(f"SELECT ad_group.resource_name FROM ad_group WHERE campaign.id = {cid['OUCA_supplement_search']} AND ad_group.status != 'REMOVED'"))[0].ad_group.resource_name
+    have = {r.ad_group_criterion.keyword.text.lower() for r in q(f"SELECT ad_group_criterion.keyword.text FROM ad_group_criterion WHERE ad_group.resource_name = '{agr}' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'")}
+    missing = [k for k in dict.fromkeys(lp1) if k.lower() not in have]
+    print('LP1 keywords:', len(set(lp1)), 'already in old:', len(set(lp1)) - len(missing), 'to add:', len(missing))
+    print('ADD|', missing)
+    ops = []
+    for k in missing:
+        op = client.get_type("AdGroupCriterionOperation"); c = op.create; c.ad_group = agr
+        c.status = E.AdGroupCriterionStatusEnum.ENABLED; c.keyword.text = k; c.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; ops.append(op)
+    if ops:
+        try:
+            client.get_service("AdGroupCriterionService").mutate_ad_group_criteria(customer_id=CID, operations=ops); print('OK keywords added (phrase only):', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED kw -', e.message)
+    for cname in ('OUCA_supplement_search', 'ouca_supplement_pmax'):
+        hv = {r.campaign_criterion.keyword.text.lower() for r in q(f"SELECT campaign_criterion.keyword.text FROM campaign_criterion WHERE campaign.id = {cid[cname]} AND campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'")}
+        nops = []
+        for t in cfg['NEG']:
+            if t.lower() in hv: continue
+            op = client.get_type("CampaignCriterionOperation"); n = op.create; n.campaign = f"customers/{CID}/campaigns/{cid[cname]}"
+            n.negative = True; n.keyword.text = t; n.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; nops.append(op)
+        print(cname, 'existing negatives:', len(hv), 'to add:', len(nops), [o.create.keyword.text for o in nops])
+        if nops:
+            try:
+                client.get_service("CampaignCriterionService").mutate_campaign_criteria(customer_id=CID, operations=nops); print('  OK negatives added', len(nops))
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:5]: print('  FAILED neg -', e.message)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
