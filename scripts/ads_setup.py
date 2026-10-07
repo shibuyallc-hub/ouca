@@ -623,11 +623,13 @@ if MODE == 'old_pmax':
         if t.lower() in th2: continue
         o_ = client.get_type("AssetGroupSignalOperation"); sg = o_.create; sg.asset_group = AG2; sg.search_theme.text = t; ops.append(o_)
     print('themes src:', len(th1), 'to add:', len(ops))
-    if ops:
-        try:
-            client.get_service("AssetGroupSignalService").mutate_asset_group_signals(customer_id=CID, operations=ops); print('OK themes added')
-        except GoogleAdsException as ex:
-            for e in ex.failure.errors[:3]: print('FAILED themes -', e.message)
+    import time as _t
+    for i in range(0, len(ops), 10):
+        for attempt in range(4):
+            try:
+                client.get_service("AssetGroupSignalService").mutate_asset_group_signals(customer_id=CID, operations=ops[i:i+10]); print('OK themes chunk', i); break
+            except GoogleAdsException as ex:
+                print('retry themes chunk', i, [e.message[:80] for e in ex.failure.errors[:1]]); _t.sleep(3)
     # 4) オーディエンスシグナル（P-Max_LP2_AG1と同じ条件）
     has_aud = [r for r in q(f"SELECT campaign.id, asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group.resource_name = '{AG2}'") if r.asset_group_signal.audience.audience]
     if not has_aud:
