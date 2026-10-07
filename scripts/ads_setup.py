@@ -543,7 +543,7 @@ if MODE == 'old_split':
     print('sitelinks: old campaign', len(sl1), 'LP2 campaign', len(sl2))
     ops = []
     for agrn, items in ((ag1, sl1), (ag2, sl2)):
-        have = {r.ad_group_asset.asset for r in q(f"SELECT ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'")}
+        have = {r.ad_group_asset.asset for r in q(f"SELECT ad_group.resource_name, ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'")}
         for rn, asset in items:
             if asset in have: continue
             m = client.get_type("MutateOperation"); c = m.ad_group_asset_operation.create; c.ad_group = agrn; c.asset = asset; c.field_type = E.AssetFieldTypeEnum.SITELINK; ops.append(m)
@@ -559,7 +559,7 @@ if MODE == 'old_split':
         print('RESULT|', nm, 'keywords', len(crit(agrn)))
         for r in q(f"SELECT ad_group_ad.ad.final_urls, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status FROM ad_group_ad WHERE ad_group.resource_name = '{agrn}' AND ad_group_ad.status != 'REMOVED'"):
             print('RESULT|', nm, 'ad', list(r.ad_group_ad.ad.final_urls), r.ad_group_ad.policy_summary.approval_status.name, r.ad_group_ad.policy_summary.review_status.name)
-        print('RESULT|', nm, 'sitelinks', len(list(q(f"SELECT ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'"))))
+        print('RESULT|', nm, 'sitelinks', len(list(q(f"SELECT ad_group.resource_name, ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'"))))
     sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
