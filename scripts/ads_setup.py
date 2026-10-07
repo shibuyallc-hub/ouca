@@ -575,7 +575,7 @@ if MODE == 'old_pmax':
     E = client.enums
     cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
     SUF_P = 'utm_source=google&utm_medium=cpc&utm_campaign={campaignid}'
-    camps = {r.campaign.name: (r.campaign.id, r.campaign.resource_name, r.campaign.url_expansion_opt_out, r.campaign.final_url_suffix) for r in q("SELECT campaign.id, campaign.name, campaign.url_expansion_opt_out, campaign.final_url_suffix FROM campaign WHERE campaign.status != 'REMOVED'")}
+    camps = {r.campaign.name: (r.campaign.id, r.campaign.resource_name, False, r.campaign.final_url_suffix) for r in q("SELECT campaign.id, campaign.name, campaign.final_url_suffix FROM campaign WHERE campaign.status != 'REMOVED'")}
     OLDC = camps['ouca_supplement_pmax']; P1 = camps['P-Max_LP1']; P2 = camps['P-Max_LP2']
     print('url_expansion_opt_out old/P1/P2:', OLDC[2], P1[2], P2[2], '| old suffix:', OLDC[3])
     ag1 = list(q(f"SELECT campaign.id, asset_group.resource_name, asset_group.name, asset_group.final_urls, asset_group.path1, asset_group.path2 FROM asset_group WHERE campaign.id = {OLDC[0]} AND asset_group.status != 'REMOVED'"))
