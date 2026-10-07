@@ -347,6 +347,64 @@ if MODE == 'old_add':
             except GoogleAdsException as ex:
                 for e in ex.failure.errors[:5]: print('  FAILED neg -', e.message)
     sys.exit(0)
+if MODE == 'old_lp1_switch':
+    import json as _j
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    URL = cfg['LP1']
+    SUF = 'utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_content={adgroupid}'
+    cs = {r.campaign.name: (r.campaign.id, r.campaign.resource_name, r.campaign.final_url_suffix, r.campaign.tracking_url_template) for r in q("SELECT campaign.id, campaign.name, campaign.final_url_suffix, campaign.tracking_url_template FROM campaign WHERE campaign.status != 'REMOVED'")}
+    OLD, NEW = 'OUCA_supplement_search', '検索_LP1'
+    print('old suffix/track:', cs[OLD][2], '|', cs[OLD][3])
+    # 1) 広告の遷移先
+    for r in q(f"SELECT ad_group_ad.ad.resource_name, ad_group_ad.ad.final_urls, ad_group_ad.ad.final_mobile_urls, ad_group_ad.ad.type, ad_group_ad.status FROM ad_group_ad WHERE campaign.id = {cs[OLD][0]} AND ad_group_ad.status != 'REMOVED'"):
+        ad = r.ad_group_ad.ad
+        print('AD|', ad.resource_name, ad.type_.name, r.ad_group_ad.status.name, list(ad.final_urls), list(ad.final_mobile_urls))
+        op = client.get_type("AdOperation"); u = op.update; u.resource_name = ad.resource_name; u.final_urls.append(URL)
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        try:
+            client.get_service("AdService").mutate_ads(customer_id=CID, operations=[op]); print('  OK final url ->', URL)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED ad -', e.message)
+    # 2) キャンペーンのURLサフィックス
+    op = client.get_type("CampaignOperation"); u = op.update; u.resource_name = cs[OLD][1]; u.final_url_suffix = SUF
+    client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+    try:
+        client.get_service("CampaignService").mutate_campaigns(customer_id=CID, operations=[op]); print('OK campaign suffix set')
+    except GoogleAdsException as ex:
+        for e in ex.failure.errors[:3]: print('FAILED suffix -', e.message)
+    # 3) アセット
+    def camp_assets(cid):
+        d = {}
+        for r in q(f"SELECT campaign_asset.resource_name, campaign_asset.asset, campaign_asset.field_type, campaign_asset.status, asset.type, asset.name FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.status != 'REMOVED'"):
+            d.setdefault(r.campaign_asset.field_type.name, []).append((r.campaign_asset.resource_name, r.campaign_asset.asset))
+        return d
+    newa, olda = camp_assets(cs[NEW][0]), camp_assets(cs[OLD][0])
+    print('NEW assets:', {k: len(v) for k, v in newa.items()})
+    print('OLD assets:', {k: len(v) for k, v in olda.items()})
+    ops = []
+    for ft, items in newa.items():
+        if ft in ('HEADLINE', 'DESCRIPTION'): continue
+        for rn, asset in olda.get(ft, []):
+            m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
+        for rn, asset in items:
+            m = client.get_type("MutateOperation"); c = m.campaign_asset_operation.create
+            c.campaign = cs[OLD][1]; c.asset = asset; c.field_type = getattr(E.AssetFieldTypeEnum, ft); ops.append(m)
+    # 新側にない種類で旧に残っているもの
+    for ft, items in olda.items():
+        if ft not in newa: print('OLD-only type (kept):', ft, len(items))
+    if ops:
+        try:
+            client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops); print('OK assets replaced, ops:', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED assets -', e.message)
+    print('OLD assets after:', {k: len(v) for k, v in camp_assets(cs[OLD][0]).items()})
+    # 4) 広告グループ単位のアセット（残っていれば表示）
+    for r in q(f"SELECT ad_group.name, ad_group_asset.field_type, ad_group_asset.status FROM ad_group_asset WHERE campaign.id = {cs[OLD][0]} AND ad_group_asset.status != 'REMOVED'"):
+        print('AGASSET|', r.ad_group.name, r.ad_group_asset.field_type.name)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
