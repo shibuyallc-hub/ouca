@@ -378,7 +378,7 @@ if MODE == 'old_lp1_switch':
     # 3) アセット
     def camp_assets(cid):
         d = {}
-        for r in q(f"SELECT campaign_asset.resource_name, campaign_asset.asset, campaign_asset.field_type, campaign_asset.status FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.status != 'REMOVED'"):
+        for r in q(f"SELECT campaign.id, campaign_asset.resource_name, campaign_asset.asset, campaign_asset.field_type, campaign_asset.status FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.status != 'REMOVED'"):
             d.setdefault(r.campaign_asset.field_type.name, []).append((r.campaign_asset.resource_name, r.campaign_asset.asset))
         return d
     newa, olda = camp_assets(cs[NEW][0]), camp_assets(cs[OLD][0])
@@ -402,7 +402,7 @@ if MODE == 'old_lp1_switch':
             for e in ex.failure.errors[:5]: print('FAILED assets -', e.message)
     print('OLD assets after:', {k: len(v) for k, v in camp_assets(cs[OLD][0]).items()})
     # 4) 広告グループ単位のアセット（残っていれば表示）
-    for r in q(f"SELECT ad_group.name, ad_group_asset.field_type, ad_group_asset.status FROM ad_group_asset WHERE campaign.id = {cs[OLD][0]} AND ad_group_asset.status != 'REMOVED'"):
+    for r in q(f"SELECT campaign.id, ad_group.name, ad_group_asset.field_type, ad_group_asset.status FROM ad_group_asset WHERE campaign.id = {cs[OLD][0]} AND ad_group_asset.status != 'REMOVED'"):
         print('AGASSET|', r.ad_group.name, r.ad_group_asset.field_type.name)
     sys.exit(0)
 if MODE == 'rebuild_search':
