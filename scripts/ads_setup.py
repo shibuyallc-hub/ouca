@@ -387,14 +387,20 @@ if MODE == 'old_lp1_switch':
     ops = []
     for ft, items in newa.items():
         if ft in ('HEADLINE', 'DESCRIPTION'): continue
-        for rn, asset in olda.get(ft, []):
-            m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
-        for rn, asset in items:
-            m = client.get_type("MutateOperation"); c = m.campaign_asset_operation.create
-            c.campaign = cs[OLD][1]; c.asset = asset; c.field_type = getattr(E.AssetFieldTypeEnum, ft); ops.append(m)
-    # 新側にない種類で旧に残っているもの
+        new_assets = {a for rn, a in items}; old_assets = {a for rn, a in olda.get(ft, [])}
+        for rn, a in olda.get(ft, []):
+            if a not in new_assets:
+                m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
+        for rn, a in items:
+            if a not in old_assets:
+                m = client.get_type("MutateOperation"); c = m.campaign_asset_operation.create
+                c.campaign = cs[OLD][1]; c.asset = a; c.field_type = getattr(E.AssetFieldTypeEnum, ft); ops.append(m)
+    # 新側にない種類（旧のURLを指すもの）は外す
     for ft, items in olda.items():
-        if ft not in newa: print('OLD-only type (kept):', ft, len(items))
+        if ft not in newa:
+            print('OLD-only type removed:', ft, len(items))
+            for rn, a in items:
+                m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
     if ops:
         try:
             client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops); print('OK assets replaced, ops:', len(ops))
