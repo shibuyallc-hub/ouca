@@ -682,6 +682,38 @@ if MODE == 'old_pmax':
         print('RESULT|', nm, 'assets', cnt)
     print('RESULT| campaign assets now', {k: len(v) for k, v in camp_assets(OLDC[0]).items()})
     sys.exit(0)
+if MODE == 'pmax_sl':
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    camps = {r.campaign.name: r.campaign.id for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}
+    OLDC = camps['ouca_supplement_pmax']
+    ags = {r.asset_group.name: r.asset_group.resource_name for r in q(f"SELECT campaign.id, asset_group.name, asset_group.resource_name FROM asset_group WHERE campaign.id = {OLDC} AND asset_group.status != 'REMOVED'")}
+    print('asset groups:', list(ags))
+    def sl(cid):
+        return [r.campaign_asset.asset for r in q(f"SELECT campaign.id, campaign_asset.asset FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED'")]
+    lp1 = sl(camps['P-Max_LP1']); lp2 = sl(camps['P-Max_LP2'])
+    print('sitelinks LP1/LP2:', len(lp1), len(lp2))
+    ok = True
+    for nm, items in (('OUCA_supplement_pmax_LP2', lp2), ('OUCA_supplement_pmax', lp1)):
+        ops = []
+        for a in items:
+            m = client.get_type("MutateOperation"); x = m.asset_group_asset_operation.create
+            x.asset_group = ags[nm]; x.asset = a; x.field_type = E.AssetFieldTypeEnum.SITELINK; ops.append(m)
+        try:
+            client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops); print('OK asset-group sitelinks:', nm, len(ops))
+        except GoogleAdsException as ex:
+            ok = False
+            for e in ex.failure.errors[:3]: print('FAILED', nm, '-', str(e.error_code).replace(chr(10), ' '), '|', e.message)
+    if ok:
+        ops = []
+        for r in q(f"SELECT campaign.id, campaign_asset.resource_name FROM campaign_asset WHERE campaign.id = {OLDC} AND campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED'"):
+            m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = r.campaign_asset.resource_name; ops.append(m)
+        client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops); print('OK campaign-level sitelinks removed:', len(ops))
+    for nm, rn in ags.items():
+        n = len(list(q(f"SELECT campaign.id, asset_group_asset.asset FROM asset_group_asset WHERE asset_group.resource_name = '{rn}' AND asset_group_asset.field_type = 'SITELINK' AND asset_group_asset.status != 'REMOVED'")))
+        print('RESULT|', nm, 'asset-group sitelinks', n)
+    print('RESULT| campaign sitelinks', len(sl(OLDC)))
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
