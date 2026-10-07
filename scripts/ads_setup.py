@@ -468,6 +468,99 @@ if MODE == 'old_lp2_ad':
     for r in q(f"SELECT campaign.id, ad_group_ad.ad.final_urls, ad_group_ad.status, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status FROM ad_group_ad WHERE campaign.id = {cid} AND ad_group_ad.status != 'REMOVED'"):
         print('ADNOW|', list(r.ad_group_ad.ad.final_urls), r.ad_group_ad.status.name, r.ad_group_ad.policy_summary.approval_status.name, r.ad_group_ad.policy_summary.review_status.name)
     sys.exit(0)
+if MODE == 'old_split':
+    import json as _j, unicodedata
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    wd = lambda t: sum(2 if unicodedata.east_asian_width(c) in 'WFA' else 1 for c in t)
+    camps = {r.campaign.name: (r.campaign.id, r.campaign.resource_name) for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}
+    OLDC = camps['OUCA_supplement_search']; NEW2 = camps['検索_LP2_高価格・経営者']
+    ag1 = list(q(f"SELECT campaign.id, ad_group.resource_name, ad_group.name FROM ad_group WHERE campaign.id = {OLDC[0]} AND ad_group.name = 'OUCA_supplement_ag' AND ad_group.status != 'REMOVED'"))[0].ad_group.resource_name
+    # --- 広告グループLP2（同じキャンペーン内）---
+    NAME2 = 'OUCA_supplement_ag_LP2'
+    rows = list(q(f"SELECT campaign.id, ad_group.resource_name FROM ad_group WHERE campaign.id = {OLDC[0]} AND ad_group.name = '{NAME2}' AND ad_group.status != 'REMOVED'"))
+    if rows: ag2 = rows[0].ad_group.resource_name; print('ad group LP2 exists')
+    else:
+        op = client.get_type("AdGroupOperation"); g = op.create; g.name = NAME2; g.campaign = OLDC[1]
+        g.status = E.AdGroupStatusEnum.ENABLED; g.type_ = E.AdGroupTypeEnum.SEARCH_STANDARD
+        ag2 = client.get_service("AdGroupService").mutate_ad_groups(customer_id=CID, operations=[op]).results[0].resource_name; print('OK ad group created', ag2)
+    # --- キーワード割り振り ---
+    lp1 = [k for g in cfg['KW'] if g['url'] == cfg['LP1'] for k in g['kws']]
+    lp2 = [k for g in cfg['KW'] if g['url'] == cfg['LP2'] for k in g['kws']]
+    old_lp1_only = ['集中力 サプリ', '巡り サプリ', '酪酸菌サプリ 口コミ', '腸活サプリ 人気', '便秘 サプリ 女性', 'サプリ 通販 口コミ', '丁寧な暮らし サプリ', 'インスタ映え サプリ', '贈り物 サプリ', 'カプセル サプリ 腸活']
+    old_common = ['OUCA supplement 口コミ', 'OUCA 評判', 'オウカ 酪酸']
+    old_lp2_only = ['接待 胃腸 対策', 'パフォーマンス サプリ 男性', '睡眠不足 サプリ 男性', 'プレミアムサプリ 腸活', 'サプリ 通販 高級', '忙しい人 サプリ']
+    drop = ['OUCA 解約', 'サプリ 定期便', '健康 ギフト']
+    KW1 = list(dict.fromkeys(lp1 + old_lp1_only + old_common))
+    KW2 = list(dict.fromkeys(lp1 + old_lp1_only + old_common + lp2 + old_lp2_only))
+    REMOVE1 = {k.lower() for k in lp2 + old_lp2_only + drop} - {k.lower() for k in KW1}
+    print('KW1:', len(KW1), 'KW2:', len(KW2), 'remove from AG1:', len(REMOVE1))
+    def crit(agrn):
+        return list(q(f"SELECT ad_group_criterion.resource_name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type FROM ad_group_criterion WHERE ad_group.resource_name = '{agrn}' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'"))
+    def add_kw(agrn, kws):
+        have = {r.ad_group_criterion.keyword.text.lower() for r in crit(agrn)}
+        ops = []
+        for k in kws:
+            if k.lower() in have: continue
+            op = client.get_type("AdGroupCriterionOperation"); c = op.create; c.ad_group = agrn
+            c.status = E.AdGroupCriterionStatusEnum.ENABLED; c.keyword.text = k; c.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; ops.append(op)
+        for i in range(0, len(ops), 400): client.get_service("AdGroupCriterionService").mutate_ad_group_criteria(customer_id=CID, operations=ops[i:i+400])
+        return len(ops)
+    try:
+        print('AG2 keywords added:', add_kw(ag2, KW2)); print('AG1 keywords added:', add_kw(ag1, KW1))
+        rem = [r.ad_group_criterion.resource_name for r in crit(ag1) if r.ad_group_criterion.keyword.text.lower() in REMOVE1]
+        ops = []
+        for rn in rem:
+            op = client.get_type("AdGroupCriterionOperation"); op.remove = rn; ops.append(op)
+        for i in range(0, len(ops), 400): client.get_service("AdGroupCriterionService").mutate_ad_group_criteria(customer_id=CID, operations=ops[i:i+400])
+        print('AG1 keywords removed:', len(ops))
+    except GoogleAdsException as ex:
+        for e in ex.failure.errors[:5]: print('FAILED kw -', e.message)
+    # --- LP2広告（AG2）---
+    has = list(q(f"SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group.resource_name = '{ag2}' AND ad_group_ad.status != 'REMOVED'"))
+    if not has:
+        op = client.get_type("AdGroupAdOperation"); a = op.create; a.ad_group = ag2; a.status = E.AdGroupAdStatusEnum.ENABLED
+        a.ad.final_urls.append(cfg['LP2']); r_ = a.ad.responsive_search_ad
+        for i, h in enumerate(cfg['LP2_H']):
+            assert wd(h) <= 30, h
+            t = client.get_type("AdTextAsset"); t.text = h
+            if i == 0: t.pinned_field = E.ServedAssetFieldTypeEnum.HEADLINE_1
+            r_.headlines.append(t)
+        for d in cfg['LP2_D']:
+            assert wd(d) <= 90, d
+            t = client.get_type("AdTextAsset"); t.text = d; r_.descriptions.append(t)
+        r_.path1 = 'OUCA'; r_.path2 = 'supplement'
+        try:
+            print('OK LP2 ad in AG2:', client.get_service("AdGroupAdService").mutate_ad_group_ads(customer_id=CID, operations=[op]).results[0].resource_name)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED ad -', e.message)
+    else: print('AG2 already has ad')
+    # --- サイトリンク：広告グループ単位へ ---
+    def sitelinks(cid):
+        return [(r.campaign_asset.resource_name, r.campaign_asset.asset) for r in q(f"SELECT campaign.id, campaign_asset.resource_name, campaign_asset.asset FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED'")]
+    sl1 = sitelinks(OLDC[0]); sl2 = sitelinks(NEW2[0])
+    print('sitelinks: old campaign', len(sl1), 'LP2 campaign', len(sl2))
+    ops = []
+    for agrn, items in ((ag1, sl1), (ag2, sl2)):
+        have = {r.ad_group_asset.asset for r in q(f"SELECT ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'")}
+        for rn, asset in items:
+            if asset in have: continue
+            m = client.get_type("MutateOperation"); c = m.ad_group_asset_operation.create; c.ad_group = agrn; c.asset = asset; c.field_type = E.AssetFieldTypeEnum.SITELINK; ops.append(m)
+    for rn, asset in sl1:
+        m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
+    if ops:
+        try:
+            client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops); print('OK sitelinks moved to ad group level, ops:', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED sitelinks -', e.message)
+    # --- 結果 ---
+    for nm, agrn in (('AG1', ag1), ('AG2', ag2)):
+        print('RESULT|', nm, 'keywords', len(crit(agrn)))
+        for r in q(f"SELECT ad_group_ad.ad.final_urls, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status FROM ad_group_ad WHERE ad_group.resource_name = '{agrn}' AND ad_group_ad.status != 'REMOVED'"):
+            print('RESULT|', nm, 'ad', list(r.ad_group_ad.ad.final_urls), r.ad_group_ad.policy_summary.approval_status.name, r.ad_group_ad.policy_summary.review_status.name)
+        print('RESULT|', nm, 'sitelinks', len(list(q(f"SELECT ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'"))))
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
