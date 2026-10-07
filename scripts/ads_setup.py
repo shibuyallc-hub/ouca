@@ -568,6 +568,118 @@ if MODE == 'sl_check':
     for r in q("SELECT campaign.name, campaign_asset.field_type, campaign_asset.status, asset.sitelink_asset.link_text FROM campaign_asset WHERE campaign.name = 'OUCA_supplement_search' AND campaign_asset.field_type = 'SITELINK'"):
         print('CSL|', r.campaign_asset.status.name, r.asset.sitelink_asset.link_text)
     sys.exit(0)
+if MODE == 'old_pmax':
+    import json as _j
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    SUF_P = 'utm_source=google&utm_medium=cpc&utm_campaign={campaignid}'
+    camps = {r.campaign.name: (r.campaign.id, r.campaign.resource_name, r.campaign.url_expansion_opt_out, r.campaign.final_url_suffix) for r in q("SELECT campaign.id, campaign.name, campaign.url_expansion_opt_out, campaign.final_url_suffix FROM campaign WHERE campaign.status != 'REMOVED'")}
+    OLDC = camps['ouca_supplement_pmax']; P1 = camps['P-Max_LP1']; P2 = camps['P-Max_LP2']
+    print('url_expansion_opt_out old/P1/P2:', OLDC[2], P1[2], P2[2], '| old suffix:', OLDC[3])
+    ag1 = list(q(f"SELECT campaign.id, asset_group.resource_name, asset_group.name, asset_group.final_urls, asset_group.path1, asset_group.path2 FROM asset_group WHERE campaign.id = {OLDC[0]} AND asset_group.status != 'REMOVED'"))
+    for r in ag1: print('OLD AG:', r.asset_group.name, r.asset_group.resource_name, list(r.asset_group.final_urls), r.asset_group.path1, r.asset_group.path2)
+    AG1 = ag1[0].asset_group.resource_name
+    src = list(q(f"SELECT campaign.id, asset_group.resource_name, asset_group.final_urls, asset_group.path1, asset_group.path2 FROM asset_group WHERE campaign.id = {P2[0]} AND asset_group.status != 'REMOVED'"))[0].asset_group
+    # 1) 既存アセットグループの遷移先 -> LP1、サフィックス
+    op = client.get_type("AssetGroupOperation"); u = op.update; u.resource_name = AG1; del u.final_urls[:]; u.final_urls.append(cfg['LP1'])
+    client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+    try:
+        client.get_service("AssetGroupService").mutate_asset_groups(customer_id=CID, operations=[op]); print('OK old AG final url -> LP1')
+    except GoogleAdsException as ex:
+        for e in ex.failure.errors[:3]: print('FAILED AG1 url -', e.message)
+    op = client.get_type("CampaignOperation"); u = op.update; u.resource_name = OLDC[1]; u.final_url_suffix = SUF_P
+    client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+    try:
+        client.get_service("CampaignService").mutate_campaigns(customer_id=CID, operations=[op]); print('OK campaign suffix')
+    except GoogleAdsException as ex:
+        for e in ex.failure.errors[:3]: print('FAILED suffix -', e.message)
+    # 2) LP2アセットグループを新規作成（P-Max_LP2のアセットを共有）
+    NAME2 = 'OUCA_supplement_pmax_LP2'
+    ex2 = list(q(f"SELECT campaign.id, asset_group.resource_name FROM asset_group WHERE campaign.id = {OLDC[0]} AND asset_group.name = '{NAME2}' AND asset_group.status != 'REMOVED'"))
+    if ex2: AG2 = ex2[0].asset_group.resource_name; print('AG2 exists', AG2)
+    else:
+        items = [(r.asset_group_asset.asset, r.asset_group_asset.field_type.name) for r in q(f"SELECT campaign.id, asset_group_asset.asset, asset_group_asset.field_type FROM asset_group_asset WHERE asset_group.resource_name = '{src.resource_name}' AND asset_group_asset.status != 'REMOVED'")]
+        print('source assets:', len(items))
+        ops = []
+        m = client.get_type("MutateOperation"); g = m.asset_group_operation.create
+        g.resource_name = client.get_service("AssetGroupService").asset_group_path(CID, -1); g.name = NAME2; g.campaign = OLDC[1]
+        g.status = E.AssetGroupStatusEnum.ENABLED; g.final_urls.append(cfg['LP2']); g.path1 = src.path1 or 'OUCA'; g.path2 = src.path2 or 'supplement'; ops.append(m)
+        for asset, ft in items:
+            m = client.get_type("MutateOperation"); x = m.asset_group_asset_operation.create
+            x.asset_group = g.resource_name; x.asset = asset; x.field_type = getattr(E.AssetFieldTypeEnum, ft); ops.append(m)
+        try:
+            res = client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops)
+            AG2 = res.mutate_operation_responses[0].asset_group_result.resource_name; print('OK AG2 created', AG2, 'ops', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:6]: print('FAILED AG2 -', e.message)
+            sys.exit(0)
+    # 3) 検索テーマ（元のAG1と同じ50個）をAG2へ
+    th1 = [r.asset_group_signal.search_theme.text for r in q(f"SELECT campaign.id, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group.resource_name = '{AG1}'") if r.asset_group_signal.search_theme.text]
+    th2 = {r.asset_group_signal.search_theme.text.lower() for r in q(f"SELECT campaign.id, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group.resource_name = '{AG2}'") if r.asset_group_signal.search_theme.text}
+    ops = []
+    for t in th1:
+        if t.lower() in th2: continue
+        o_ = client.get_type("AssetGroupSignalOperation"); sg = o_.create; sg.asset_group = AG2; sg.search_theme.text = t; ops.append(o_)
+    print('themes src:', len(th1), 'to add:', len(ops))
+    if ops:
+        try:
+            client.get_service("AssetGroupSignalService").mutate_asset_group_signals(customer_id=CID, operations=ops); print('OK themes added')
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('FAILED themes -', e.message)
+    # 4) オーディエンスシグナル（P-Max_LP2_AG1と同じ条件）
+    has_aud = [r for r in q(f"SELECT campaign.id, asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group.resource_name = '{AG2}'") if r.asset_group_signal.audience.audience]
+    if not has_aud:
+        srcsig = [r.asset_group_signal.audience.audience for r in q(f"SELECT campaign.id, asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group.resource_name = '{src.resource_name}'") if r.asset_group_signal.audience.audience]
+        if srcsig:
+            sa = list(q(f"SELECT audience.resource_name, audience.dimensions FROM audience WHERE audience.resource_name = '{srcsig[0]}'"))[0].audience
+            aop = client.get_type("AudienceOperation"); au = aop.create; au.name = 'adsx_old_pmax_LP2_' + str(int(__import__('time').time())); au.scope = E.AudienceScopeEnum.ASSET_GROUP; au.asset_group = AG2
+            for d in sa.dimensions:
+                nd = client.get_type("AudienceDimension"); client.copy_from(nd, d); au.dimensions.append(nd)
+            try:
+                au_rn = client.get_service("AudienceService").mutate_audiences(customer_id=CID, operations=[aop]).results[0].resource_name
+                sop = client.get_type("AssetGroupSignalOperation"); sg = sop.create; sg.asset_group = AG2; sg.audience.audience = au_rn
+                client.get_service("AssetGroupSignalService").mutate_asset_group_signals(customer_id=CID, operations=[sop]); print('OK audience signal for AG2')
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:3]: print('FAILED audience -', e.message)
+    # 5) キャンペーンのアセットをLP1の構成に（サイトリンク以外）
+    def camp_assets(cid):
+        d = {}
+        for r in q(f"SELECT campaign.id, campaign_asset.resource_name, campaign_asset.asset, campaign_asset.field_type FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.status != 'REMOVED'"):
+            d.setdefault(r.campaign_asset.field_type.name, []).append((r.campaign_asset.resource_name, r.campaign_asset.asset))
+        return d
+    newa, olda = camp_assets(P1[0]), camp_assets(OLDC[0])
+    print('P1 assets:', {k: len(v) for k, v in newa.items()}); print('OLD assets:', {k: len(v) for k, v in olda.items()})
+    ops = []
+    for ft, items in newa.items():
+        na = {a for _, a in items}; oa = {a for _, a in olda.get(ft, [])}
+        for rn, a in olda.get(ft, []):
+            if a not in na:
+                m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
+        for rn, a in items:
+            if a not in oa:
+                m = client.get_type("MutateOperation"); c = m.campaign_asset_operation.create; c.campaign = OLDC[1]; c.asset = a; c.field_type = getattr(E.AssetFieldTypeEnum, ft); ops.append(m)
+    for ft, items in olda.items():
+        if ft not in newa:
+            print('OLD-only type removed:', ft, len(items))
+            for rn, a in items:
+                m = client.get_type("MutateOperation"); m.campaign_asset_operation.remove = rn; ops.append(m)
+    if ops:
+        try:
+            client.get_service("GoogleAdsService").mutate(customer_id=CID, mutate_operations=ops); print('OK campaign assets replaced, ops:', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED campaign assets -', e.message)
+    # 6) 結果
+    for nm, agrn in (('AG1', AG1), ('AG2', AG2)):
+        for r in q(f"SELECT campaign.id, asset_group.name, asset_group.final_urls, asset_group.ad_strength, asset_group.status, asset_group.primary_status FROM asset_group WHERE asset_group.resource_name = '{agrn}'"):
+            print('RESULT|', nm, r.asset_group.name, list(r.asset_group.final_urls), r.asset_group.status.name, r.asset_group.primary_status.name, r.asset_group.ad_strength.name)
+        cnt = {}
+        for r in q(f"SELECT campaign.id, asset_group_asset.field_type FROM asset_group_asset WHERE asset_group.resource_name = '{agrn}' AND asset_group_asset.status != 'REMOVED'"):
+            cnt[r.asset_group_asset.field_type.name] = cnt.get(r.asset_group_asset.field_type.name, 0) + 1
+        print('RESULT|', nm, 'assets', cnt)
+    print('RESULT| campaign assets now', {k: len(v) for k, v in camp_assets(OLDC[0]).items()})
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
