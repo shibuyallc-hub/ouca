@@ -378,7 +378,7 @@ if MODE == 'old_lp1_switch':
     # 3) アセット
     def camp_assets(cid):
         d = {}
-        for r in q(f"SELECT campaign_asset.resource_name, campaign_asset.asset, campaign_asset.field_type, campaign_asset.status, asset.type, asset.name FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.status != 'REMOVED'"):
+        for r in q(f"SELECT campaign_asset.resource_name, campaign_asset.asset, campaign_asset.field_type, campaign_asset.status FROM campaign_asset WHERE campaign.id = {cid} AND campaign_asset.status != 'REMOVED'"):
             d.setdefault(r.campaign_asset.field_type.name, []).append((r.campaign_asset.resource_name, r.campaign_asset.asset))
         return d
     newa, olda = camp_assets(cs[NEW][0]), camp_assets(cs[OLD][0])
