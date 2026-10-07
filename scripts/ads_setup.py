@@ -561,6 +561,13 @@ if MODE == 'old_split':
             print('RESULT|', nm, 'ad', list(r.ad_group_ad.ad.final_urls), r.ad_group_ad.policy_summary.approval_status.name, r.ad_group_ad.policy_summary.review_status.name)
         print('RESULT|', nm, 'sitelinks', len(list(q(f"SELECT ad_group.resource_name, ad_group_asset.asset FROM ad_group_asset WHERE ad_group.resource_name = '{agrn}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED'"))))
     sys.exit(0)
+if MODE == 'sl_check':
+    for r in q("SELECT ad_group.name, campaign.name, ad_group_asset.field_type, ad_group_asset.status, ad_group_asset.primary_status, ad_group_asset.primary_status_reasons, asset.sitelink_asset.link_text, asset.final_urls FROM ad_group_asset WHERE campaign.name = 'OUCA_supplement_search' AND ad_group_asset.field_type = 'SITELINK'"):
+        a = r.ad_group_asset
+        print('SL|', r.ad_group.name, '|', a.status.name, '|', a.primary_status.name, '|', [x.name for x in a.primary_status_reasons], '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    for r in q("SELECT campaign.name, campaign_asset.field_type, campaign_asset.status, asset.sitelink_asset.link_text FROM campaign_asset WHERE campaign.name = 'OUCA_supplement_search' AND campaign_asset.field_type = 'SITELINK'"):
+        print('CSL|', r.campaign_asset.status.name, r.asset.sitelink_asset.link_text)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
