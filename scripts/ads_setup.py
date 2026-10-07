@@ -443,7 +443,7 @@ if MODE == 'old_lp2_ad':
     # ローテーション：均等寄り
     try:
         from google.api_core import protobuf_helpers
-        op = client.get_type("AdGroupOperation"); u = op.update; u.resource_name = ag.resource_name; u.ad_rotation_mode = E.AdRotationModeEnum.ROTATE_FOREVER
+        op = client.get_type("AdGroupOperation"); u = op.update; u.resource_name = ag.resource_name; u.ad_rotation_mode = E.AdGroupAdRotationModeEnum.ROTATE_FOREVER
         client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
         client.get_service("AdGroupService").mutate_ad_groups(customer_id=CID, operations=[op]); print('OK ad rotation -> ROTATE_FOREVER')
     except GoogleAdsException as ex:
