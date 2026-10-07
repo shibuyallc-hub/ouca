@@ -916,7 +916,7 @@ lp_map = {}
 def _lp_row(date, lp, bucket):
     key = (date, lp, bucket)
     if key not in lp_map:
-        lp_map[key] = {'sessions': 0, 'views': 0, 'purchases': 0, 'revenue': 0.0}
+        lp_map[key] = {'sessions': 0, 'views': 0, 'purchases': 0, 'revenue': 0.0, 'engaged': 0, 'eng_time': 0.0}
     return lp_map[key]
 
 try:
@@ -939,13 +939,15 @@ try:
     req_lp_sessions = RunReportRequest(
         property=f"properties/{GA4_PROPERTY_ID}",
         dimensions=[Dimension(name="date"), Dimension(name="contentGroup"), Dimension(name="sessionDefaultChannelGroup")],
-        metrics=[Metric(name="sessions"), Metric(name="screenPageViews")],
+        metrics=[Metric(name="sessions"), Metric(name="screenPageViews"), Metric(name="engagedSessions"), Metric(name="userEngagementDuration")],
         date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
     )
     for row in ga4_client.run_report(req_lp_sessions).rows:
         r = _lp_row(row.dimension_values[0].value, lp_label(row.dimension_values[1].value, row.dimension_values[0].value), channel_to_bucket(row.dimension_values[2].value))
         r['sessions'] += int(float(row.metric_values[0].value))
         r['views'] += int(float(row.metric_values[1].value))
+        r['engaged'] += int(float(row.metric_values[2].value))      # エンゲージ訪問数（直帰数 = 訪問数 − エンゲージ訪問数）
+        r['eng_time'] += float(row.metric_values[3].value)          # エンゲージ時間の合計（秒）
     print(f"  ✓ LP session records merged: {len(lp_map)} keys total")
 except Exception as e:
     print(f"  ✗ LP session data error: {e}")
@@ -1405,15 +1407,19 @@ sheet_name_lp = 'LP別'
 try:
     ws_lp = sheet.worksheet(sheet_name_lp)
     ws_lp.clear()
+    try:
+        ws_lp.resize(cols=12)   # 列を増やしたので、既存シートの列数を広げる
+    except Exception as _e:
+        print(f"  ⚠ LP別 resize: {_e}")
 except:
-    ws_lp = sheet.add_worksheet(sheet_name_lp, rows=6000, cols=9)
+    ws_lp = sheet.add_worksheet(sheet_name_lp, rows=6000, cols=12)
 
-rows_lp = [['日付', 'LP', '流入区分', '訪問数', 'PV', '購入数', '売上(¥)', '更新日時']]
+rows_lp = [['日付', 'LP', '流入区分', '訪問数', 'PV', '購入数', '売上(¥)', 'エンゲージ訪問数', 'エンゲージ時間(秒)', '更新日時']]
 _now_lp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 for (d_, lp_, b_), v_ in sorted(lp_map.items()):
     rows_lp.append([
         datetime.strptime(d_, '%Y%m%d').strftime('%Y-%m-%d'), lp_, b_,
-        v_['sessions'], v_['views'], v_['purchases'], round(v_['revenue'], 0), _now_lp,
+        v_['sessions'], v_['views'], v_['purchases'], round(v_['revenue'], 0), v_['engaged'], round(v_['eng_time'], 0), _now_lp,
     ])
 ws_lp.append_rows(rows_lp)
 print(f"  ✓ {len(rows_lp) - 1} rows written to LP別 sheet")

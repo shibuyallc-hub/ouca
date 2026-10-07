@@ -486,6 +486,7 @@
         <div class="kpi-card"><div class="kpi-label">購入数</div><div class="kpi-value" id="lpTotalPurchases">0</div></div>
         <div class="kpi-card"><div class="kpi-label">購入率（購入数÷訪問数）</div><div class="kpi-value" id="lpTotalCvr">0%</div></div>
         <div class="kpi-card"><div class="kpi-label">客単価</div><div class="kpi-value" id="lpTotalAov">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">直帰率（GA4。エンゲージしなかった訪問の割合）</div><div class="kpi-value" id="lpTotalBounce">-</div></div>
       </div>
 
       <div class="charts-row">
@@ -505,10 +506,10 @@
         <h2 style="margin-bottom: 15px;">🧭 LP別 実績（選択期間）</h2>
         <table>
           <thead>
-            <tr><th>LP</th><th>流入区分</th><th>広告費(¥)</th><th>訪問数</th><th>PV</th><th>購入数</th><th>購入率</th><th>売上(¥)</th><th>ROAS</th><th>CPA(¥)</th><th>客単価(¥)</th></tr>
+            <tr><th>LP</th><th>流入区分</th><th>広告費(¥)</th><th>訪問数</th><th>PV</th><th>購入数</th><th>購入率</th><th>直帰率</th><th>平均エンゲージ時間</th><th>売上(¥)</th><th>ROAS</th><th>CPA(¥)</th><th>客単価(¥)</th></tr>
           </thead>
           <tbody id="lpTable">
-            <tr><td colspan="11" style="text-align:center;padding:40px;">読み込み中...</td></tr>
+            <tr><td colspan="13" style="text-align:center;padding:40px;">読み込み中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -2014,6 +2015,8 @@
       const channelFilter = document.getElementById('lpChannel').value;
       const num = (row, k) => parseFloat(row[k]) || 0;
       const cvr = (p, v) => v > 0 ? (p / v * 100).toFixed(2) + '%' : '-';
+      const bounce = (s, e) => s > 0 ? (Math.max(0, s - e) / s * 100).toFixed(1) + '%' : '-';   // 直帰率 = (訪問数 − エンゲージ訪問数) ÷ 訪問数
+      const avgEng = (t, s) => s > 0 ? Math.round(t / s) + '秒' : '-';
       const yen = n => '¥' + formatNumber(n);
 
       const filtered = allLpData.filter(row => {
@@ -2031,14 +2034,16 @@
       const byKey = {};
       const get = (lp, ch) => {
         const key = lp + '||' + ch;
-        if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0 };
+        if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0, engaged: 0, engTime: 0 };
         return byKey[key];
       };
-      let tS = 0, tP = 0, tR = 0, tSpend = 0, adR = 0, adP = 0;
+      let tS = 0, tP = 0, tR = 0, tSpend = 0, adR = 0, adP = 0, tEng = 0, tEngTime = 0;
       filtered.forEach(row => {
         const r = get(row['LP'] || '', row['流入区分'] || '');
         r.sessions += num(row, '訪問数'); r.views += num(row, 'PV');
         r.purchases += num(row, '購入数'); r.revenue += num(row, '売上(¥)');
+        r.engaged += num(row, 'エンゲージ訪問数'); r.engTime += num(row, 'エンゲージ時間(秒)');
+        tEng += num(row, 'エンゲージ訪問数'); tEngTime += num(row, 'エンゲージ時間(秒)');
         tS += num(row, '訪問数'); tP += num(row, '購入数'); tR += num(row, '売上(¥)');
         if (row['流入区分'] === 'Google広告' || row['流入区分'] === 'Meta広告') { adR += num(row, '売上(¥)'); adP += num(row, '購入数'); }
       });
@@ -2056,6 +2061,7 @@
       document.getElementById('lpTotalRoas').textContent = tSpend > 0 ? (adR / tSpend).toFixed(2) + '倍' : '-';
       document.getElementById('lpTotalCpa').textContent = tSpend > 0 && adP > 0 ? yen(tSpend / adP) : '-';
       document.getElementById('lpTotalAov').textContent = tP > 0 ? yen(tR / tP) : '-';
+      document.getElementById('lpTotalBounce').textContent = bounce(tS, tEng);
 
       const tbody = document.getElementById('lpTable');
       tbody.innerHTML = '';
@@ -2063,11 +2069,11 @@
       rows.forEach(r => {
         const hasSpend = r.spend > 0;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${hasSpend ? yen(r.spend) : '-'}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>${yen(r.revenue)}</td><td>${hasSpend ? (r.revenue / r.spend).toFixed(2) + '倍' : '-'}</td><td>${hasSpend && r.purchases > 0 ? yen(r.spend / r.purchases) : '-'}</td><td>${r.purchases > 0 ? yen(r.revenue / r.purchases) : '-'}</td>`;
+        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${hasSpend ? yen(r.spend) : '-'}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>${bounce(r.sessions, r.engaged)}</td><td>${avgEng(r.engTime, r.sessions)}</td><td>${yen(r.revenue)}</td><td>${hasSpend ? (r.revenue / r.spend).toFixed(2) + '倍' : '-'}</td><td>${hasSpend && r.purchases > 0 ? yen(r.spend / r.purchases) : '-'}</td><td>${r.purchases > 0 ? yen(r.revenue / r.purchases) : '-'}</td>`;
         tbody.appendChild(tr);
       });
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;">選択期間のデータがありません（「LP別」シートが未作成の場合は、先にデータ更新を実行してください）</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;">選択期間のデータがありません（「LP別」シートが未作成の場合は、先にデータ更新を実行してください）</td></tr>';
       }
 
       // 週別・月別の売上（LPごとの系列）
