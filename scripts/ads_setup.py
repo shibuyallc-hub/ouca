@@ -299,6 +299,12 @@ if MODE == 'headline_fix':
                 for e in ex.failure.errors[:4]: print('  FAILED', e.message)
     print('done')
     sys.exit(0)
+if MODE == 'report_data':
+    print("== google daily ==")
+    for r in q("SELECT segments.date, campaign.name, campaign.advertising_channel_type, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.all_conversions FROM campaign WHERE segments.date BETWEEN '2026-09-01' AND '2026-10-07' AND metrics.impressions > 0"):
+        m = r.metrics
+        print('GD|', r.segments.date, '|', r.campaign.name, '|', r.campaign.advertising_channel_type.name, '|', round(m.cost_micros/1e6), '|', m.impressions, '|', m.clicks, '|', round(m.conversions, 2), '|', round(m.all_conversions, 2))
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')

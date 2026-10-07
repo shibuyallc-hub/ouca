@@ -7,18 +7,8 @@ def get(path, params):
     r = requests.get(f'https://graph.facebook.com/{V}/{path}', params=p, timeout=60).json()
     if 'error' in r: print('ERROR', path, r['error'].get('message')); return []
     return r.get('data', r)
-print('== images ==')
-for i in get(f'{ACC}/adimages', {'fields': 'hash,name,width,height', 'limit': 100}):
-    print('IMG', i.get('hash'), i.get('name'), i.get('width'), i.get('height'))
-print('== ads2 ==')
-for a in get(f'{ACC}/ads', {'fields': 'name,status,effective_status,adset{name,daily_budget},campaign{name},creative{asset_feed_spec,object_story_spec,call_to_action_type,url_tags,title,body}', 'limit': 50}):
-    c = a.get('creative', {}); f = c.get('asset_feed_spec', {}); o = c.get('object_story_spec', {})
-    if 'LP' not in (a.get('campaign') or {}).get('name', ''): continue
-    print('AD', a['name'], a['effective_status'], (a.get('adset') or {}).get('name'), 'page', o.get('page_id'), 'ig', o.get('instagram_user_id'))
-    print('  bodies:', [b.get('text') for b in f.get('bodies', [])])
-    print('  titles:', [t.get('text') for t in f.get('titles', [])])
-    print('  descs:', [t.get('text') for t in f.get('descriptions', [])])
-    print('  links:', [u.get('website_url') for u in f.get('link_urls', [])], 'cta:', f.get('call_to_action_types'), 'fmt:', f.get('ad_formats'), 'opt:', f.get('optimization_type'))
-    print('  images:', [(i.get('hash'), i.get('url_tags')) for i in f.get('images', [])])
-    ld = o.get('link_data')
-    if ld: print('  link_data:', json.dumps(ld, ensure_ascii=False)[:900])
+print('== meta daily ==')
+for i in get(f'{ACC}/insights', {'level': 'campaign', 'time_increment': 1, 'time_range': json.dumps({'since': '2026-09-01', 'until': '2026-10-07'}), 'fields': 'campaign_name,spend,impressions,clicks,inline_link_clicks,actions', 'limit': 500}):
+    acts = {x['action_type']: x['value'] for x in i.get('actions', [])} if i.get('actions') else {}
+    pur = max([float(acts.get(k, 0)) for k in ('purchase', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase')] or [0])
+    print('MD|', i['date_start'], '|', i['campaign_name'], '|', i['spend'], '|', i['impressions'], '|', i.get('clicks'), '|', i.get('inline_link_clicks'), '|', pur, '|', acts.get('landing_page_view', 0))
