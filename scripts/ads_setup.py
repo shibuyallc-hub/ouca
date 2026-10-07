@@ -411,6 +411,63 @@ if MODE == 'old_lp1_switch':
     for r in q(f"SELECT campaign.id, ad_group.name, ad_group_asset.field_type, ad_group_asset.status FROM ad_group_asset WHERE campaign.id = {cs[OLD][0]} AND ad_group_asset.status != 'REMOVED'"):
         print('AGASSET|', r.ad_group.name, r.ad_group_asset.field_type.name)
     sys.exit(0)
+if MODE == 'old_lp2_ad':
+    import json as _j, unicodedata
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    wd = lambda t: sum(2 if unicodedata.east_asian_width(c) in 'WFA' else 1 for c in t)
+    cid = {r.campaign.name: r.campaign.id for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED'")}['OUCA_supplement_search']
+    ag = list(q(f"SELECT ad_group.resource_name, ad_group.ad_rotation_mode FROM ad_group WHERE campaign.id = {cid} AND ad_group.status != 'REMOVED'"))[0].ad_group
+    print('ad group:', ag.resource_name, 'rotation:', ag.ad_rotation_mode.name)
+    urls = [list(r.ad_group_ad.ad.final_urls) for r in q(f"SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = {cid} AND ad_group_ad.status != 'REMOVED'")]
+    print('existing ad urls:', urls)
+    if not any(cfg['LP2'] in u for u in urls):
+        op = client.get_type("AdGroupAdOperation"); a = op.create; a.ad_group = ag.resource_name; a.status = E.AdGroupAdStatusEnum.ENABLED
+        a.ad.final_urls.append(cfg['LP2']); r = a.ad.responsive_search_ad
+        for i, h in enumerate(cfg['LP2_H']):
+            assert wd(h) <= 30, h
+            t = client.get_type("AdTextAsset"); t.text = h
+            if i == 0: t.pinned_field = E.ServedAssetFieldTypeEnum.HEADLINE_1
+            r.headlines.append(t)
+        for d in cfg['LP2_D']:
+            assert wd(d) <= 90, d
+            t = client.get_type("AdTextAsset"); t.text = d; r.descriptions.append(t)
+        r.path1 = 'OUCA'; r.path2 = 'supplement'
+        try:
+            res = client.get_service("AdGroupAdService").mutate_ad_group_ads(customer_id=CID, operations=[op]); print('OK LP2 ad created:', res.results[0].resource_name)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED ad -', e.message)
+    else:
+        print('LP2 ad already exists')
+    # ローテーション：均等寄り
+    try:
+        from google.api_core import protobuf_helpers
+        op = client.get_type("AdGroupOperation"); u = op.update; u.resource_name = ag.resource_name; u.ad_rotation_mode = E.AdRotationModeEnum.ROTATE_FOREVER
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        client.get_service("AdGroupService").mutate_ad_groups(customer_id=CID, operations=[op]); print('OK ad rotation -> ROTATE_FOREVER')
+    except GoogleAdsException as ex:
+        for e in ex.failure.errors[:3]: print('FAILED rotation -', e.message)
+    # LP2用キーワード（フレーズ一致のみ）
+    lp2 = [k for g in cfg['KW'] if g['url'] == cfg['LP2'] for k in g['kws']]
+    have = {r.ad_group_criterion.keyword.text.lower() for r in q(f"SELECT ad_group_criterion.keyword.text FROM ad_group_criterion WHERE ad_group.resource_name = '{ag.resource_name}' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'")}
+    missing = [k for k in dict.fromkeys(lp2) if k.lower() not in have]
+    print('LP2 keywords:', len(set(lp2)), 'to add:', len(missing))
+    ops = []
+    for k in missing:
+        op = client.get_type("AdGroupCriterionOperation"); c = op.create; c.ad_group = ag.resource_name
+        c.status = E.AdGroupCriterionStatusEnum.ENABLED; c.keyword.text = k; c.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; ops.append(op)
+    if ops:
+        try:
+            for i in range(0, len(ops), 400): client.get_service("AdGroupCriterionService").mutate_ad_group_criteria(customer_id=CID, operations=ops[i:i+400])
+            print('OK LP2 keywords added (phrase only):', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED kw -', e.message)
+    n = list(q(f"SELECT campaign.id, ad_group_criterion.keyword.text FROM ad_group_criterion WHERE campaign.id = {cid} AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'"))
+    print('keywords in old ad group now:', len(n))
+    for r in q(f"SELECT campaign.id, ad_group_ad.ad.final_urls, ad_group_ad.status, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status FROM ad_group_ad WHERE campaign.id = {cid} AND ad_group_ad.status != 'REMOVED'"):
+        print('ADNOW|', list(r.ad_group_ad.ad.final_urls), r.ad_group_ad.status.name, r.ad_group_ad.policy_summary.approval_status.name, r.ad_group_ad.policy_summary.review_status.name)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
