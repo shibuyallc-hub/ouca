@@ -486,7 +486,7 @@
         <div class="kpi-card"><div class="kpi-label">購入数</div><div class="kpi-value" id="lpTotalPurchases">0</div></div>
         <div class="kpi-card"><div class="kpi-label">購入率（購入数÷訪問数）</div><div class="kpi-value" id="lpTotalCvr">0%</div></div>
         <div class="kpi-card"><div class="kpi-label">客単価</div><div class="kpi-value" id="lpTotalAov">-</div></div>
-        <div class="kpi-card"><div class="kpi-label">直帰率（GA4。エンゲージしなかった訪問の割合）</div><div class="kpi-value" id="lpTotalBounce">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">直帰率（GA4。直近2日は集計待ちのため除外）</div><div class="kpi-value" id="lpTotalBounce">-</div></div>
       </div>
 
       <div class="charts-row">
@@ -2034,16 +2034,19 @@
       const byKey = {};
       const get = (lp, ch) => {
         const key = lp + '||' + ch;
-        if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0, engaged: 0, engTime: 0 };
+        if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0, engaged: 0, engTime: 0, bSess: 0 };
         return byKey[key];
       };
-      let tS = 0, tP = 0, tR = 0, tSpend = 0, adR = 0, adP = 0, tEng = 0, tEngTime = 0;
+      let tS = 0, tP = 0, tR = 0, tSpend = 0, adR = 0, adP = 0, tEng = 0, tEngTime = 0, tBS = 0;
       filtered.forEach(row => {
         const r = get(row['LP'] || '', row['流入区分'] || '');
         r.sessions += num(row, '訪問数'); r.views += num(row, 'PV');
         r.purchases += num(row, '購入数'); r.revenue += num(row, '売上(¥)');
-        r.engaged += num(row, 'エンゲージ訪問数'); r.engTime += num(row, 'エンゲージ時間(秒)');
-        tEng += num(row, 'エンゲージ訪問数'); tEngTime += num(row, 'エンゲージ時間(秒)');
+        // エンゲージ訪問数が空欄の日（直近2日・GA4集計待ち）は、直帰率の分母にも入れない
+        if ((row['エンゲージ訪問数'] || '') !== '') {
+          r.bSess += num(row, '訪問数'); r.engaged += num(row, 'エンゲージ訪問数'); r.engTime += num(row, 'エンゲージ時間(秒)');
+          tBS += num(row, '訪問数'); tEng += num(row, 'エンゲージ訪問数'); tEngTime += num(row, 'エンゲージ時間(秒)');
+        }
         tS += num(row, '訪問数'); tP += num(row, '購入数'); tR += num(row, '売上(¥)');
         if (row['流入区分'] === 'Google広告' || row['流入区分'] === 'Meta広告') { adR += num(row, '売上(¥)'); adP += num(row, '購入数'); }
       });
@@ -2061,7 +2064,7 @@
       document.getElementById('lpTotalRoas').textContent = tSpend > 0 ? (adR / tSpend).toFixed(2) + '倍' : '-';
       document.getElementById('lpTotalCpa').textContent = tSpend > 0 && adP > 0 ? yen(tSpend / adP) : '-';
       document.getElementById('lpTotalAov').textContent = tP > 0 ? yen(tR / tP) : '-';
-      document.getElementById('lpTotalBounce').textContent = bounce(tS, tEng);
+      document.getElementById('lpTotalBounce').textContent = bounce(tBS, tEng);
 
       const tbody = document.getElementById('lpTable');
       tbody.innerHTML = '';
@@ -2069,7 +2072,7 @@
       rows.forEach(r => {
         const hasSpend = r.spend > 0;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${hasSpend ? yen(r.spend) : '-'}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>${bounce(r.sessions, r.engaged)}</td><td>${avgEng(r.engTime, r.sessions)}</td><td>${yen(r.revenue)}</td><td>${hasSpend ? (r.revenue / r.spend).toFixed(2) + '倍' : '-'}</td><td>${hasSpend && r.purchases > 0 ? yen(r.spend / r.purchases) : '-'}</td><td>${r.purchases > 0 ? yen(r.revenue / r.purchases) : '-'}</td>`;
+        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${hasSpend ? yen(r.spend) : '-'}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>${bounce(r.bSess, r.engaged)}</td><td>${avgEng(r.engTime, r.bSess)}</td><td>${yen(r.revenue)}</td><td>${hasSpend ? (r.revenue / r.spend).toFixed(2) + '倍' : '-'}</td><td>${hasSpend && r.purchases > 0 ? yen(r.spend / r.purchases) : '-'}</td><td>${r.purchases > 0 ? yen(r.revenue / r.purchases) : '-'}</td>`;
         tbody.appendChild(tr);
       });
       if (rows.length === 0) {

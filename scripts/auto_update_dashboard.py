@@ -1416,10 +1416,16 @@ except:
 
 rows_lp = [['日付', 'LP', '流入区分', '訪問数', 'PV', '購入数', '売上(¥)', 'エンゲージ訪問数', 'エンゲージ時間(秒)', '更新日時']]
 _now_lp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+# GA4のengagedSessions（直帰率の元）は集計が1〜2日遅れ、直近は0に見えて「直帰率100%」になる。
+# 日本時間で「今日・昨日」は暫定として空欄にし、ダッシュボード側で直帰率の計算から除外する。
+_jst_today = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y%m%d')
+_jst_yday = (datetime.utcnow() + timedelta(hours=9) - timedelta(days=1)).strftime('%Y%m%d')
 for (d_, lp_, b_), v_ in sorted(lp_map.items()):
+    _prov = d_ >= _jst_yday
     rows_lp.append([
         datetime.strptime(d_, '%Y%m%d').strftime('%Y-%m-%d'), lp_, b_,
-        v_['sessions'], v_['views'], v_['purchases'], round(v_['revenue'], 0), v_['engaged'], round(v_['eng_time'], 0), _now_lp,
+        v_['sessions'], v_['views'], v_['purchases'], round(v_['revenue'], 0),
+        '' if _prov else v_['engaged'], '' if _prov else round(v_['eng_time'], 0), _now_lp,
     ])
 ws_lp.append_rows(rows_lp)
 print(f"  ✓ {len(rows_lp) - 1} rows written to LP別 sheet")
