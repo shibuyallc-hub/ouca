@@ -1430,6 +1430,63 @@ for (d_, lp_, b_), v_ in sorted(lp_map.items()):
 ws_lp.append_rows(rows_lp)
 print(f"  ✓ {len(rows_lp) - 1} rows written to LP別 sheet")
 
+# ===== LANDING-PAGE BASED BOUNCE (GA4 landingPagePlusQueryString) =====
+# 「そのLPに最初に着地した訪問」だけを数える。コンテンツグループ版（上の LP別）は、LP→ショップと進んだ訪問も
+# 両方の行に入るため、LP単体の直帰率は、こちら（着地LP別）が正確。
+print("\n🛬 Fetching landing-page bounce from GA4...")
+import re as _re
+def lp_from_landing(v):
+    v = (v or '').strip()
+    lp = lp_from_url('https://ouca.today' + (v if v.startswith('/') else '/' + v))
+    if lp in ('ショップ以外のURL', 'LP（名前不明）', 'URL不明'):
+        m = _re.search(r'lp-[a-z0-9_-]+', v)
+        if m:
+            return m.group(0)
+    return lp
+
+landing_map = {}
+_landing_raw = {}
+try:
+    req_land = RunReportRequest(
+        property=f"properties/{GA4_PROPERTY_ID}",
+        dimensions=[Dimension(name="date"), Dimension(name="landingPagePlusQueryString"), Dimension(name="sessionDefaultChannelGroup")],
+        metrics=[Metric(name="sessions"), Metric(name="engagedSessions"), Metric(name="userEngagementDuration")],
+        date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+        limit=100000,
+    )
+    for row in ga4_client.run_report(req_land).rows:
+        d_ = row.dimension_values[0].value
+        raw_ = row.dimension_values[1].value
+        lp_ = lp_from_landing(raw_)
+        b_ = channel_to_bucket(row.dimension_values[2].value)
+        r_ = landing_map.setdefault((d_, lp_, b_), {'sessions': 0, 'engaged': 0, 'eng_time': 0.0})
+        r_['sessions'] += int(float(row.metric_values[0].value))
+        r_['engaged'] += int(float(row.metric_values[1].value))
+        r_['eng_time'] += float(row.metric_values[2].value)
+        _landing_raw[(lp_, raw_.split('&')[0][:60])] = _landing_raw.get((lp_, raw_.split('&')[0][:60]), 0) + int(float(row.metric_values[0].value))
+    print(f"  ✓ landing records: {len(landing_map)} keys")
+    for (lp_, raw_), n_ in sorted(_landing_raw.items(), key=lambda x: -x[1])[:12]:
+        print(f"    landing {lp_} <- {raw_} ({n_})")
+except Exception as e:
+    print(f"  ✗ landing data error: {e}")
+
+if landing_map:
+    sheet_name_land = '着地LP別'
+    try:
+        ws_land = sheet.worksheet(sheet_name_land)
+        ws_land.clear()
+    except Exception:
+        ws_land = sheet.add_worksheet(sheet_name_land, rows=6000, cols=8)
+    rows_land = [['日付', '着地LP', '流入区分', '訪問数', 'エンゲージ訪問数', 'エンゲージ時間(秒)', '更新日時']]
+    for (d_, lp_, b_), v_ in sorted(landing_map.items()):
+        _prov = d_ >= _jst_yday   # 直近2日はGA4のエンゲージ集計待ち → 空欄
+        rows_land.append([
+            datetime.strptime(d_, '%Y%m%d').strftime('%Y-%m-%d'), lp_, b_, v_['sessions'],
+            '' if _prov else v_['engaged'], '' if _prov else round(v_['eng_time'], 0), _now_lp,
+        ])
+    ws_land.append_rows(rows_land)
+    print(f"  ✓ {len(rows_land) - 1} rows written to 着地LP別 sheet")
+
 # ===== CREATE/UPDATE LP AD-SPEND SHEET =====
 print("\n💾 Updating LP ad-spend sheet...")
 

@@ -489,6 +489,19 @@
         <div class="kpi-card"><div class="kpi-label">直帰率（GA4。直近2日は集計待ちのため除外）</div><div class="kpi-value" id="lpTotalBounce">-</div></div>
       </div>
 
+      <div class="data-table">
+        <h2 style="margin-bottom: 6px;">🛬 着地LP別 直帰率（選択期間）</h2>
+        <p style="font-size:12px;color:#6c757d;margin:0 0 12px;">そのLPに最初に着地した訪問だけで集計（LP→ショップへ進んだ訪問も、着地したLPの1件として数えます）。直帰率＝エンゲージしなかった訪問の割合。直近2日はGA4の集計待ちのため除外。</p>
+        <table>
+          <thead>
+            <tr><th>着地LP</th><th>流入区分</th><th>訪問数</th><th>集計済み訪問数</th><th>直帰率</th><th>平均エンゲージ時間</th></tr>
+          </thead>
+          <tbody id="lpLandingTable">
+            <tr><td colspan="6" style="text-align:center;padding:20px;">読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="charts-row">
         <div class="chart-card">
           <h3>週別 売上（LP別）</h3>
@@ -709,6 +722,7 @@
     let allTrafficData = [];
     let allProductData = [];
     let allLpData = [];
+    let allLandingData = [];
     let allLpSpendData = [];
     let allPageData = [];
     let allGoogleCampaignData = [];
@@ -1010,12 +1024,13 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, lpCsv, lpSpendCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, lpCsv, lpSpendCsv, landingCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
           fetch(sheetCsvUrl('LP別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('LP別_広告費')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('着地LP別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('ページ別行動')).then(r => r.text()),
           fetch(sheetCsvUrl('Google_キャンペーン別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('Meta_広告別')).then(r => r.text()).catch(() => ''),
@@ -1031,6 +1046,7 @@
         allProductData = parseCSV(productCsv);
         allLpData = parseCSV(lpCsv);
         allLpSpendData = parseCSV(lpSpendCsv);
+        allLandingData = parseCSV(landingCsv);
         allPageData = parseCSV(pageCsv);
         allGoogleCampaignData = parseCSV(gCampCsv);
         allMetaAdData = parseCSV(metaAdCsv);
@@ -2065,6 +2081,21 @@
       document.getElementById('lpTotalCpa').textContent = tSpend > 0 && adP > 0 ? yen(tSpend / adP) : '-';
       document.getElementById('lpTotalAov').textContent = tP > 0 ? yen(tR / tP) : '-';
       document.getElementById('lpTotalBounce').textContent = bounce(tBS, tEng);
+
+      // 着地LP別の直帰率
+      const landBy = {};
+      allLandingData.forEach(row => {
+        if (!inRange(row['日付'], range.start, range.end)) return;
+        if (channelFilter !== 'ALL' && row['流入区分'] !== channelFilter) return;
+        const k = (row['着地LP'] || '') + '||' + (row['流入区分'] || '');
+        const o = landBy[k] || (landBy[k] = { lp: row['着地LP'] || '', ch: row['流入区分'] || '', s: 0, bs: 0, e: 0, t: 0 });
+        o.s += num(row, '訪問数');
+        if ((row['エンゲージ訪問数'] || '') !== '') { o.bs += num(row, '訪問数'); o.e += num(row, 'エンゲージ訪問数'); o.t += num(row, 'エンゲージ時間(秒)'); }
+      });
+      const landRows = Object.values(landBy).sort((a, b) => a.lp.localeCompare(b.lp) || b.s - a.s);
+      const landBody = document.getElementById('lpLandingTable');
+      landBody.innerHTML = landRows.length ? landRows.map(o => `<tr><td>${o.lp}</td><td>${o.ch}</td><td>${formatNumber(o.s)}</td><td>${formatNumber(o.bs)}</td><td>${bounce(o.bs, o.e)}</td><td>${avgEng(o.t, o.bs)}</td></tr>`).join('')
+        : '<tr><td colspan="6" style="text-align:center;padding:20px;">データがありません（データ更新後に表示されます）</td></tr>';
 
       const tbody = document.getElementById('lpTable');
       tbody.innerHTML = '';
