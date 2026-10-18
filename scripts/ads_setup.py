@@ -798,6 +798,24 @@ if MODE == 'callout_swap':
         except GoogleAdsException as ex:
             for e in ex.failure.errors[:5]: print('FAILED remove -', e.message)
     sys.exit(0)
+if MODE == 'callout_link':
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    NEW = '菌でなく代謝物'
+    new_rn = [r.asset.resource_name for r in q(f"SELECT asset.resource_name FROM asset WHERE asset.type = 'CALLOUT' AND asset.callout_asset.callout_text = '{NEW}'")][0]
+    camps = [(r.campaign.id, r.campaign.name) for r in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.status != 'REMOVED' AND campaign.advertising_channel_type IN ('SEARCH', 'PERFORMANCE_MAX')")]
+    have = {r.campaign.id for r in q(f"SELECT campaign.id FROM campaign_asset WHERE asset.resource_name = '{new_rn}' AND campaign_asset.status != 'REMOVED'")}
+    ops = []
+    for cid_, cname in camps:
+        if cid_ in have: continue
+        op = client.get_type("CampaignAssetOperation"); c = op.create; c.campaign = f"customers/{CID}/campaigns/{cid_}"; c.asset = new_rn; c.field_type = E.AssetFieldTypeEnum.CALLOUT; ops.append(op); print('link ->', cname)
+    if ops:
+        try: client.get_service("CampaignAssetService").mutate_campaign_assets(customer_id=CID, operations=ops); print('linked:', len(ops))
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:5]: print('FAILED link -', e.message)
+    for r in q("SELECT campaign.name, campaign.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        if '代謝物' in r.asset.callout_asset.callout_text: print('NOW|', r.campaign.name, r.campaign.status.name, r.asset.callout_asset.callout_text)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
