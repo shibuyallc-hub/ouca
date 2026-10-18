@@ -714,6 +714,27 @@ if MODE == 'pmax_sl':
         print('RESULT|', nm, 'asset-group sitelinks', n)
     print('RESULT| campaign sitelinks', len(sl(OLDC)))
     sys.exit(0)
+if MODE == 'neg_all':
+    # config の NEG を、全キャンペーン（検索・P-Max／停止中も含む）へ「部分一致ではなくフレーズ一致」の除外KWとして差分登録
+    import json as _j
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    camps = [(r.campaign.id, r.campaign.name, r.campaign.status.name, r.campaign.advertising_channel_type.name) for r in q("SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type FROM campaign WHERE campaign.status != 'REMOVED' AND campaign.advertising_channel_type IN ('SEARCH', 'PERFORMANCE_MAX')")]
+    for cid_, cname, cst, ctype in camps:
+        hv = {r.campaign_criterion.keyword.text.lower() for r in q(f"SELECT campaign_criterion.keyword.text FROM campaign_criterion WHERE campaign.id = {cid_} AND campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'")}
+        nops = []
+        for t in cfg['NEG']:
+            if t.lower() in hv: continue
+            op = client.get_type("CampaignCriterionOperation"); n = op.create; n.campaign = f"customers/{CID}/campaigns/{cid_}"
+            n.negative = True; n.keyword.text = t; n.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; nops.append(op)
+        print(f'{cname} [{cst}/{ctype}] existing negatives: {len(hv)} / to add: {len(nops)}', [o.create.keyword.text for o in nops][:15])
+        if nops:
+            try:
+                client.get_service("CampaignCriterionService").mutate_campaign_criteria(customer_id=CID, operations=nops); print('  OK added', len(nops))
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:5]: print('  FAILED -', e.message)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
