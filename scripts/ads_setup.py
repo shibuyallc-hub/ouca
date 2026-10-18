@@ -735,6 +735,33 @@ if MODE == 'neg_all':
             except GoogleAdsException as ex:
                 for e in ex.failure.errors[:5]: print('  FAILED -', e.message)
     sys.exit(0)
+if MODE == 'copy_scan':
+    # 広告文・アセットに NG 表現（生きた／定着／増える／有効成分 等）が無いか全文スキャン（読み取りのみ）
+    import re as _re
+    PAT = _re.compile(r'生き|生菌|定着|増え|増や|有効成分|プロバイオ|ビフィズス|乳酸菌|菌を育て|菌を届け|菌の力|腸まで|腸に届|届く')
+    def chk(tag, where, text):
+        if text and PAT.search(text):
+            print('HIT|', tag, '|', where, '|', text)
+    print("== RSA ads ==")
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        tag = f"{r.campaign.name}[{r.campaign.status.name}]/{r.ad_group.name}/ad{r.ad_group_ad.ad.id}[{r.ad_group_ad.status.name}]"
+        for h in r.ad_group_ad.ad.responsive_search_ad.headlines: chk(tag, 'headline', h.text)
+        for d in r.ad_group_ad.ad.responsive_search_ad.descriptions: chk(tag, 'description', d.text)
+    print("== asset group assets ==")
+    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group.status, asset_group_asset.field_type, asset.text_asset.text FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND asset.type = 'TEXT'"):
+        chk(f"{r.campaign.name}[{r.campaign.status.name}]/{r.asset_group.name}[{r.asset_group.status.name}]", r.asset_group_asset.field_type.name, r.asset.text_asset.text)
+    print("== sitelink / callout / snippet assets (account-wide) ==")
+    for r in q("SELECT asset.id, asset.type, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2, asset.callout_asset.callout_text, asset.structured_snippet_asset.values, asset.promotion_asset.promotion_target FROM asset WHERE asset.type IN ('SITELINK', 'CALLOUT', 'STRUCTURED_SNIPPET', 'PROMOTION')"):
+        a = r.asset
+        for w, t in (('sl_text', a.sitelink_asset.link_text), ('sl_d1', a.sitelink_asset.description1), ('sl_d2', a.sitelink_asset.description2), ('callout', a.callout_asset.callout_text), ('snippet', ' / '.join(a.structured_snippet_asset.values)), ('promo', a.promotion_asset.promotion_target)):
+            chk(f'asset{a.id}[{a.type_.name}]', w, t)
+    print("== search themes ==")
+    for r in q("SELECT campaign.name, asset_group.name, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group_signal.search_theme.text != ''"):
+        chk(f"{r.campaign.name}/{r.asset_group.name}", 'search_theme', r.asset_group_signal.search_theme.text)
+    print("== image/video asset names (文字入り画像は目視確認が必要) ==")
+    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group_asset.field_type, asset.name, asset.image_asset.full_size.url FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND asset.type = 'IMAGE'"):
+        print('IMG|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group_asset.field_type.name, '|', r.asset.name, '|', r.asset.image_asset.full_size.url)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
