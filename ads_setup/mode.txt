@@ -1,1 +1,1 @@
-copy_scan
+verify
