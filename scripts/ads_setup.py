@@ -762,6 +762,13 @@ if MODE == 'copy_scan':
     for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group_asset.field_type, asset.name, asset.image_asset.full_size.url FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND asset.type = 'IMAGE'"):
         print('IMG|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group_asset.field_type.name, '|', r.asset.name, '|', r.asset.image_asset.full_size.url)
     sys.exit(0)
+if MODE == 'callout_use':
+    for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
+                   ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),
+                   ('customer', "SELECT customer_asset.status, asset.callout_asset.callout_text FROM customer_asset WHERE asset.type = 'CALLOUT' AND customer_asset.status != 'REMOVED'")):
+        for r in q(qq):
+            print('CALLOUT|', lv, '|', r.campaign.name if lv != 'customer' else '-', '|', r.asset.callout_asset.callout_text)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')

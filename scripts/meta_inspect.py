@@ -9,12 +9,12 @@ def get(path, params):
     if 'error' in r: print('ERROR', path, r['error'].get('message')); return []
     return r.get('data', r)
 print('== meta ad copy scan (read-only) ==')
-ads = get(f'{ACC}/ads', {'fields': 'name,effective_status,adset{name},campaign{name},creative{body,title,link_description,object_story_spec,asset_feed_spec,image_url,thumbnail_url}', 'limit': 200})
+ads = get(f'{ACC}/ads', {'fields': 'name,effective_status,adset{name},campaign{name},creative{body,title,object_story_spec,asset_feed_spec,image_url,thumbnail_url}', 'limit': 200})
 for a in ads:
     tag = f"{a.get('campaign', {}).get('name')}/{a.get('adset', {}).get('name')}/{a['name']}[{a['effective_status']}]"
     cr = a.get('creative', {}) or {}
     texts = []
-    for k in ('body', 'title', 'link_description'):
+    for k in ('body', 'title'):
         if cr.get(k): texts.append((k, cr[k]))
     oss = cr.get('object_story_spec') or {}
     for k, v in (oss.get('link_data') or {}).items():
