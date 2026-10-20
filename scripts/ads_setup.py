@@ -816,6 +816,10 @@ if MODE == 'callout_link':
     for r in q("SELECT campaign.name, campaign.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
         if '代謝物' in r.asset.callout_asset.callout_text: print('NOW|', r.campaign.name, r.campaign.status.name, r.asset.callout_asset.callout_text)
     sys.exit(0)
+if MODE == 'budgets':
+    for r in q("SELECT campaign.name, campaign.status, campaign_budget.amount_micros, campaign_budget.explicitly_shared, campaign.bidding_strategy_type, metrics.cost_micros FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date DURING LAST_7_DAYS"):
+        print('BUD|', r.campaign.name, '|', r.campaign.status.name, '|', int(r.campaign_budget.amount_micros/1e6), '|', r.campaign.bidding_strategy_type.name, '| 7d cost', int(r.metrics.cost_micros/1e6))
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
