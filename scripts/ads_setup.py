@@ -820,6 +820,29 @@ if MODE == 'budgets':
     for r in q("SELECT campaign.name, campaign.status, campaign_budget.amount_micros, campaign_budget.explicitly_shared, campaign.bidding_strategy_type, metrics.cost_micros FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date DURING LAST_7_DAYS"):
         print('BUD|', r.campaign.name, '|', r.campaign.status.name, '|', int(r.campaign_budget.amount_micros/1e6), '|', r.campaign.bidding_strategy_type.name, '| 7d cost', int(r.metrics.cost_micros/1e6))
     sys.exit(0)
+if MODE == 'neg_extra':
+    # 依頼ベースの除外KW：phrase（NEG）／exact（NEG_EXACT）／broad（NEG_BROAD）。(テキスト, マッチ)で差分登録
+    import json as _j
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    cfg = _j.load(open('ads_setup/config.json', encoding='utf-8'))
+    want = [(t, 'PHRASE') for t in cfg['NEG']] + [(t, 'EXACT') for t in cfg.get('NEG_EXACT', [])] + [(t, 'BROAD') for t in cfg.get('NEG_BROAD', [])]
+    MT = {'PHRASE': E.KeywordMatchTypeEnum.PHRASE, 'EXACT': E.KeywordMatchTypeEnum.EXACT, 'BROAD': E.KeywordMatchTypeEnum.BROAD}
+    camps = [(r.campaign.id, r.campaign.name, r.campaign.status.name) for r in q("SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status != 'REMOVED' AND campaign.advertising_channel_type IN ('SEARCH', 'PERFORMANCE_MAX')")]
+    for cid_, cname, cst in camps:
+        hv = {(r.campaign_criterion.keyword.text.lower(), r.campaign_criterion.keyword.match_type.name) for r in q(f"SELECT campaign_criterion.keyword.text, campaign_criterion.keyword.match_type FROM campaign_criterion WHERE campaign.id = {cid_} AND campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'")}
+        ops = []
+        for t, m_ in want:
+            if (t.lower(), m_) in hv: continue
+            op = client.get_type("CampaignCriterionOperation"); n = op.create; n.campaign = f"customers/{CID}/campaigns/{cid_}"
+            n.negative = True; n.keyword.text = t; n.keyword.match_type = MT[m_]; ops.append(op)
+        print(f'{cname} [{cst}] existing: {len(hv)} / to add: {len(ops)}')
+        if ops:
+            try:
+                client.get_service("CampaignCriterionService").mutate_campaign_criteria(customer_id=CID, operations=ops); print('  OK added', len(ops))
+            except GoogleAdsException as ex:
+                for e in ex.failure.errors[:5]: print('  FAILED -', e.message)
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
