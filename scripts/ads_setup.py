@@ -889,7 +889,7 @@ if MODE == 'kw_diag':
             ad_group_criterion.status, ad_group_criterion.quality_info.quality_score, ad_group_criterion.quality_info.creative_quality_score,
             ad_group_criterion.quality_info.post_click_quality_score, ad_group_criterion.quality_info.search_predicted_ctr,
             metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.search_impression_share,
-            metrics.search_top_impression_share, metrics.search_rank_lost_impression_share, metrics.search_budget_lost_impression_share
+            metrics.search_top_impression_share, metrics.search_rank_lost_impression_share
             FROM keyword_view WHERE segments.date BETWEEN '{d0}' AND '{d1}' AND metrics.impressions > 0
             ORDER BY metrics.impressions DESC LIMIT 40"""):
             k = r.ad_group_criterion; qi = k.quality_info; m = r.metrics
@@ -898,8 +898,7 @@ if MODE == 'kw_diag':
                   'imp', m.impressions, 'clk', m.clicks, 'ctr', round(m.ctr * 100, 2), 'cpc', round(m.average_cpc / 1e6),
                   'IS', round(m.search_impression_share * 100, 1) if m.search_impression_share else None,
                   'topIS', round(m.search_top_impression_share * 100, 1) if m.search_top_impression_share else None,
-                  'rankLost', round(m.search_rank_lost_impression_share * 100, 1) if m.search_rank_lost_impression_share else None,
-                  'budgetLost', round(m.search_budget_lost_impression_share * 100, 1) if m.search_budget_lost_impression_share else None]))
+                  'rankLost', round(m.search_rank_lost_impression_share * 100, 1) if m.search_rank_lost_impression_share else None]))
     print('\n##### 「腸活」を含むキーワードの検索語句（10/07-10/25）')
     try:
         for r in q("""SELECT search_term_view.search_term, segments.keyword.info.text, segments.keyword.info.match_type, ad_group.name,
