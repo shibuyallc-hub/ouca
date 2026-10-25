@@ -1487,6 +1487,56 @@ if landing_map:
     ws_land.append_rows(rows_land)
     print(f"  ✓ {len(rows_land) - 1} rows written to 着地LP別 sheet")
 
+# ===== AMAZON購入ボタンのクリック（GA4イベント amazon_click。LPのAmazonボタンを押すと発生） =====
+# クリックしたページ（pagePathPlusQueryString）からLPを判定するので、GA4のカスタムディメンション登録は不要。
+# ボタンの位置（amazon_position）は、GA4でカスタムディメンション（イベントスコープ）を登録した後に取れる。登録前は空欄。
+print("\n🛒 Fetching Amazon button clicks from GA4...")
+AMAZON_CLICK_FILTER = FilterExpression(
+    filter=Filter(field_name="eventName", string_filter=Filter.StringFilter(value="amazon_click"))
+)
+amazon_map = {}   # (date, lp, bucket, position) -> clicks
+try:
+    _amz_dims = [Dimension(name="date"), Dimension(name="pagePathPlusQueryString"), Dimension(name="sessionDefaultChannelGroup")]
+    def _run_amz(extra_dims):
+        return ga4_client.run_report(RunReportRequest(
+            property=f"properties/{GA4_PROPERTY_ID}",
+            dimensions=_amz_dims + extra_dims,
+            metrics=[Metric(name="eventCount")],
+            dimension_filter=AMAZON_CLICK_FILTER,
+            date_ranges=[DateRange(start_date="365daysAgo", end_date="today")],
+            limit=100000,
+        ))
+    try:
+        _amz_rows = _run_amz([Dimension(name="customEvent:amazon_position")])
+        _amz_has_pos = True
+    except Exception as _e_pos:
+        print(f"  ℹ amazon_position 未登録のため位置別は空欄: {str(_e_pos)[:90]}")
+        _amz_rows = _run_amz([])
+        _amz_has_pos = False
+    for row in _amz_rows.rows:
+        _d = row.dimension_values[0].value
+        _lp = lp_from_landing(row.dimension_values[1].value)
+        _b = channel_to_bucket(row.dimension_values[2].value)
+        _pos = row.dimension_values[3].value if _amz_has_pos else ''
+        if _pos in ('(not set)',): _pos = ''
+        _k = (_d, _lp, _b, _pos)
+        amazon_map[_k] = amazon_map.get(_k, 0) + int(float(row.metric_values[0].value))
+    print(f"  ✓ amazon_click records: {len(amazon_map)} keys")
+except Exception as e:
+    print(f"  ✗ amazon_click error: {e}")
+
+sheet_name_amz = 'Amazonクリック'
+try:
+    ws_amz = sheet.worksheet(sheet_name_amz)
+    ws_amz.clear()
+except Exception:
+    ws_amz = sheet.add_worksheet(sheet_name_amz, rows=3000, cols=6)
+rows_amz = [['日付', 'LP', '流入区分', '位置', 'クリック数', '更新日時']]
+for (_d, _lp, _b, _pos), _n in sorted(amazon_map.items()):
+    rows_amz.append([datetime.strptime(_d, '%Y%m%d').strftime('%Y-%m-%d'), _lp, _b, _pos, _n, _now_lp])
+ws_amz.append_rows(rows_amz)
+print(f"  ✓ {len(rows_amz) - 1} rows written to Amazonクリック sheet")
+
 # ===== CREATE/UPDATE LP AD-SPEND SHEET =====
 print("\n💾 Updating LP ad-spend sheet...")
 

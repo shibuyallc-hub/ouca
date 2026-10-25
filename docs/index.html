@@ -210,26 +210,6 @@
       </div>
 
       <div class="data-table">
-        <table>
-          <thead>
-            <tr>
-              <th>日付</th>
-              <th>媒体</th>
-              <th>売上(¥)</th>
-              <th>広告費(¥)</th>
-              <th>クリック数</th>
-              <th>CV数</th>
-              <th>CPA(¥)</th>
-              <th>ROAS</th>
-            </tr>
-          </thead>
-          <tbody id="dataTable">
-            <tr><td colspan="8" style="text-align:center;padding:40px;">「最新データを取得」を押してください</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="data-table">
         <h2 style="margin-bottom: 5px;">🔍 Google広告 キャンペーン別（選択期間）</h2>
         <p style="margin-bottom:15px;font-size:12px;color:#868e96;">※CV数はGoogle広告自身の計測です（他タブのCVはGA4の購入イベントのみを基準にしており、算出方法が異なります）。</p>
         <table>
@@ -487,6 +467,9 @@
         <div class="kpi-card"><div class="kpi-label">購入率（購入数÷訪問数）</div><div class="kpi-value" id="lpTotalCvr">0%</div></div>
         <div class="kpi-card"><div class="kpi-label">客単価</div><div class="kpi-value" id="lpTotalAov">-</div></div>
         <div class="kpi-card"><div class="kpi-label">直帰率（GA4。直近2日は集計待ちのため除外）</div><div class="kpi-value" id="lpTotalBounce">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Amazonボタン クリック数</div><div class="kpi-value" id="lpTotalAmz">0</div></div>
+        <div class="kpi-card"><div class="kpi-label">Amazonクリック率（クリック数÷訪問数）</div><div class="kpi-value" id="lpTotalAmzRate">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">Amazonクリック単価（広告費÷クリック数）</div><div class="kpi-value" id="lpTotalAmzCpc">-</div></div>
       </div>
 
       <div class="data-table">
@@ -519,10 +502,23 @@
         <h2 style="margin-bottom: 15px;">🧭 LP別 実績（選択期間）</h2>
         <table>
           <thead>
-            <tr><th>LP</th><th>流入区分</th><th>広告費(¥)</th><th>訪問数</th><th>PV</th><th>購入数</th><th>購入率</th><th>直帰率</th><th>平均エンゲージ時間</th><th>売上(¥)</th><th>ROAS</th><th>CPA(¥)</th><th>客単価(¥)</th></tr>
+            <tr><th>LP</th><th>流入区分</th><th>広告費(¥)</th><th>訪問数</th><th>PV</th><th>購入数</th><th>購入率</th><th>直帰率</th><th>平均エンゲージ時間</th><th>売上(¥)</th><th>ROAS</th><th>CPA(¥)</th><th>客単価(¥)</th><th>Amazonクリック</th><th>Amazonクリック率</th><th>Amazonクリック単価(¥)</th></tr>
           </thead>
           <tbody id="lpTable">
-            <tr><td colspan="13" style="text-align:center;padding:40px;">読み込み中...</td></tr>
+            <tr><td colspan="16" style="text-align:center;padding:40px;">読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="data-table">
+        <h2 style="margin-bottom: 6px;">🛒 Amazonボタン クリックの内訳（位置別・選択期間）</h2>
+        <p style="font-size:12px;color:#6c757d;margin:0 0 12px;">LPのAmazonボタン（CTA・購入セクション・画面下のバーなど）が押された回数です。クリック単価＝そのLPの広告費÷クリック数。位置別は、GA4でカスタムディメンション「amazon_position」を登録すると表示されます（未登録の間は「位置不明」にまとまります）。</p>
+        <table>
+          <thead>
+            <tr><th>LP</th><th>位置</th><th>クリック数</th><th>そのLPの内訳</th></tr>
+          </thead>
+          <tbody id="lpAmazonTable">
+            <tr><td colspan="4" style="text-align:center;padding:20px;">読み込み中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -733,6 +729,7 @@
     let allRegionGenderData = [];
     let allWeeklyReportData = [];
     let allMemoData = [];
+    let allAmazonData = [];
 
     // NOTE: these must stay declared before checkLogin()/the auto-login
     // block below, since a returning visitor with a valid session runs
@@ -1024,7 +1021,7 @@
     async function loadAllData() {
       showStatus('📡 スプレッドシートから読み込み中...', 'loading');
       try {
-        const [adsCsv, trafficCsv, productCsv, lpCsv, lpSpendCsv, landingCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv] = await Promise.all([
+        const [adsCsv, trafficCsv, productCsv, lpCsv, lpSpendCsv, landingCsv, pageCsv, gCampCsv, metaAdCsv, ageGenderCsv, regionCsv, eventCsv, regionGenderCsv, weeklyCsv, memoCsv, amazonCsv] = await Promise.all([
           fetch(sheetCsvUrl('Live Data')).then(r => r.text()),
           fetch(sheetCsvUrl('流入経路')).then(r => r.text()),
           fetch(sheetCsvUrl('商品別')).then(r => r.text()),
@@ -1040,6 +1037,7 @@
           fetch(sheetCsvUrl('広告_エリア性別')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('週次レポート_アーカイブ')).then(r => r.text()).catch(() => ''),
           fetch(sheetCsvUrl('改善メモ')).then(r => r.text()).catch(() => ''),
+          fetch(sheetCsvUrl('Amazonクリック')).then(r => r.text()).catch(() => ''),
         ]);
         allAdsData = parseCSV(adsCsv);
         allTrafficData = parseCSV(trafficCsv);
@@ -1056,6 +1054,7 @@
         allRegionGenderData = parseCSV(regionGenderCsv);
         allWeeklyReportData = parseCSV(weeklyCsv);
         allMemoData = parseCSV(memoCsv);
+        allAmazonData = parseCSV(amazonCsv);
 
         renderAdsTab();
         renderTrafficTab();
@@ -1109,8 +1108,6 @@
     }
 
     function displayData(data) {
-      const tbody = document.getElementById('dataTable');
-      tbody.innerHTML = '';
       let totalSpend = 0, totalCV = 0, totalRevenue = 0;
 
       data.forEach(row => {
@@ -1120,14 +1117,7 @@
         totalSpend += spend;
         totalCV += cv;
         totalRevenue += revenue;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.Date || ''}</td><td>${row.Platform || ''}</td><td>¥${formatNumber(revenue)}</td><td>¥${formatNumber(spend)}</td><td>${row.Clicks || 0}</td><td>${cv}</td><td>¥${formatNumber(parseFloat(row['CPA (¥)']) || 0)}</td><td>${row.ROAS || 0}倍</td>`;
-        tbody.appendChild(tr);
       });
-
-      if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;">選択期間のデータがありません</td></tr>';
-      }
 
       const avgCPA = totalCV > 0 ? totalSpend / totalCV : 0;
       const roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
@@ -2050,7 +2040,7 @@
       const byKey = {};
       const get = (lp, ch) => {
         const key = lp + '||' + ch;
-        if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0, engaged: 0, engTime: 0, bSess: 0 };
+        if (!byKey[key]) byKey[key] = { lp, channel: ch, spend: 0, sessions: 0, views: 0, purchases: 0, revenue: 0, engaged: 0, engTime: 0, bSess: 0, amz: 0 };
         return byKey[key];
       };
       let tS = 0, tP = 0, tR = 0, tSpend = 0, adR = 0, adP = 0, tEng = 0, tEngTime = 0, tBS = 0;
@@ -2071,6 +2061,20 @@
         const sp = num(row, '広告費(¥)');
         r.spend += sp; tSpend += sp;
       });
+      // Amazonボタンのクリック（GA4イベント amazon_click）
+      let tAmz = 0;
+      const amzByLpPos = {};
+      allAmazonData.forEach(row => {
+        if (!inRange(row['日付'], range.start, range.end)) return;
+        if (channelFilter !== 'ALL' && row['流入区分'] !== channelFilter) return;
+        const n = num(row, 'クリック数');
+        get(row['LP'] || '', row['流入区分'] || '').amz += n;
+        tAmz += n;
+        const lpName = row['LP'] || '';
+        const pos = row['位置'] || '位置不明';
+        const o = amzByLpPos[lpName] || (amzByLpPos[lpName] = {});
+        o[pos] = (o[pos] || 0) + n;
+      });
 
       document.getElementById('lpTotalSessions').textContent = formatNumber(tS);
       document.getElementById('lpTotalPurchases').textContent = formatNumber(tP);
@@ -2081,6 +2085,9 @@
       document.getElementById('lpTotalCpa').textContent = tSpend > 0 && adP > 0 ? yen(tSpend / adP) : '-';
       document.getElementById('lpTotalAov').textContent = tP > 0 ? yen(tR / tP) : '-';
       document.getElementById('lpTotalBounce').textContent = bounce(tBS, tEng);
+      document.getElementById('lpTotalAmz').textContent = formatNumber(tAmz);
+      document.getElementById('lpTotalAmzRate').textContent = tS > 0 && tAmz > 0 ? (tAmz / tS * 100).toFixed(2) + '%' : '-';
+      document.getElementById('lpTotalAmzCpc').textContent = tSpend > 0 && tAmz > 0 ? yen(tSpend / tAmz) : '-';
 
       // 着地LP別の直帰率
       const landBy = {};
@@ -2103,12 +2110,25 @@
       rows.forEach(r => {
         const hasSpend = r.spend > 0;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${hasSpend ? yen(r.spend) : '-'}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>${bounce(r.bSess, r.engaged)}</td><td>${avgEng(r.engTime, r.bSess)}</td><td>${yen(r.revenue)}</td><td>${hasSpend ? (r.revenue / r.spend).toFixed(2) + '倍' : '-'}</td><td>${hasSpend && r.purchases > 0 ? yen(r.spend / r.purchases) : '-'}</td><td>${r.purchases > 0 ? yen(r.revenue / r.purchases) : '-'}</td>`;
+        tr.innerHTML = `<td>${r.lp}</td><td>${r.channel}</td><td>${hasSpend ? yen(r.spend) : '-'}</td><td>${formatNumber(r.sessions)}</td><td>${formatNumber(r.views)}</td><td>${formatNumber(r.purchases)}</td><td>${cvr(r.purchases, r.sessions)}</td><td>${bounce(r.bSess, r.engaged)}</td><td>${avgEng(r.engTime, r.bSess)}</td><td>${yen(r.revenue)}</td><td>${hasSpend ? (r.revenue / r.spend).toFixed(2) + '倍' : '-'}</td><td>${hasSpend && r.purchases > 0 ? yen(r.spend / r.purchases) : '-'}</td><td>${r.purchases > 0 ? yen(r.revenue / r.purchases) : '-'}</td><td>${r.amz > 0 ? formatNumber(r.amz) : '-'}</td><td>${r.amz > 0 && r.sessions > 0 ? (r.amz / r.sessions * 100).toFixed(2) + '%' : '-'}</td><td>${hasSpend && r.amz > 0 ? yen(r.spend / r.amz) : '-'}</td>`;
         tbody.appendChild(tr);
       });
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;">選択期間のデータがありません（「LP別」シートが未作成の場合は、先にデータ更新を実行してください）</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:40px;">選択期間のデータがありません（「LP別」シートが未作成の場合は、先にデータ更新を実行してください）</td></tr>';
       }
+
+      // Amazonクリックの内訳（LP × 位置）
+      const amzBody = document.getElementById('lpAmazonTable');
+      const amzLps = Object.keys(amzByLpPos).sort((a, b) => Object.values(amzByLpPos[b]).reduce((x, y) => x + y, 0) - Object.values(amzByLpPos[a]).reduce((x, y) => x + y, 0));
+      const amzRowsHtml = [];
+      amzLps.forEach(lpName => {
+        const total = Object.values(amzByLpPos[lpName]).reduce((x, y) => x + y, 0);
+        Object.entries(amzByLpPos[lpName]).sort((a, b) => b[1] - a[1]).forEach(([pos, n]) => {
+          amzRowsHtml.push(`<tr><td>${lpName}</td><td>${pos}</td><td>${formatNumber(n)}</td><td>${total > 0 ? (n / total * 100).toFixed(1) + '%' : '-'}</td></tr>`);
+        });
+      });
+      amzBody.innerHTML = amzRowsHtml.length ? amzRowsHtml.join('')
+        : '<tr><td colspan="4" style="text-align:center;padding:20px;">まだクリックがありません（Amazonボタン付きのLPを公開すると表示されます）</td></tr>';
 
       // 週別・月別の売上（LPごとの系列）
       const lps = [...new Set(filtered.map(r => r['LP'] || ''))].filter(Boolean);
