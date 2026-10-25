@@ -862,6 +862,24 @@ if MODE == 'asset_perf':
     tryq('KW', f"SELECT campaign.name, ad_group.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, metrics.cost_micros, metrics.clicks, metrics.impressions FROM keyword_view WHERE segments.date BETWEEN '{D1}' AND '{D2}' AND campaign.status != 'REMOVED' AND metrics.impressions > 0",
          lambda r: print('KW|', r.campaign.name, '|', r.ad_group.name, '|', r.ad_group_criterion.keyword.text, '|', r.ad_group_criterion.keyword.match_type.name, '|', int(r.metrics.cost_micros/1e6), '|', r.metrics.clicks, '|', r.metrics.impressions))
     sys.exit(0)
+if MODE == 'ext_perf':
+    D1, D2 = '2026-10-07', '2026-10-25'
+    for tag, gaql in (
+        ('SL_a', f"SELECT campaign.name, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND segments.date BETWEEN '{D1}' AND '{D2}'"),
+        ('SL_b', f"SELECT campaign.name, asset.sitelink_asset.link_text, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND segments.date BETWEEN '{D1}' AND '{D2}' AND campaign.status != 'REMOVED'"),
+        ('SL_c', f"SELECT campaign.name, ad_group.name, asset.sitelink_asset.link_text, metrics.impressions, metrics.clicks FROM ad_group_asset WHERE ad_group_asset.field_type = 'SITELINK' AND segments.date BETWEEN '{D1}' AND '{D2}'"),
+        ('CO', f"SELECT campaign.name, asset.callout_asset.callout_text, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign_asset.field_type = 'CALLOUT' AND segments.date BETWEEN '{D1}' AND '{D2}'")):
+        try:
+            n = 0
+            for r in q(gaql):
+                n += 1
+                if tag.startswith('SL_c'): print('EXT|', tag, '|', r.campaign.name, '|', r.ad_group.name, '|', r.asset.sitelink_asset.link_text, '|', r.metrics.impressions, '|', r.metrics.clicks)
+                elif tag == 'CO': print('EXT|', tag, '|', r.campaign.name, '|', r.asset.callout_asset.callout_text, '|', r.metrics.impressions, '|', r.metrics.clicks)
+                else: print('EXT|', tag, '|', r.campaign.name, '|', r.asset.sitelink_asset.link_text, '|', r.metrics.impressions, '|', r.metrics.clicks)
+            print(f'#{tag} rows={n}')
+        except Exception as e:
+            print(f'#{tag} ERROR', str(e)[:200].replace('\n', ' '))
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
