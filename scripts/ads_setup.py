@@ -880,6 +880,54 @@ if MODE == 'ext_perf':
         except Exception as e:
             print(f'#{tag} ERROR', str(e)[:200].replace('\n', ' '))
     sys.exit(0)
+if MODE == 'kw_diag':
+    # 読み取り専用：「腸活」「腸活 サプリ」のクリック率が低い原因の調査
+    PERIODS = (('10/07-10/25', '2026-10-07', '2026-10-25'), ('09/17-10/06', '2026-09-17', '2026-10-06'))
+    for label, d0, d1 in PERIODS:
+        print(f'\n##### キーワード別（{label}） 表示>0')
+        for r in q(f"""SELECT campaign.name, ad_group.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+            ad_group_criterion.status, ad_group_criterion.quality_info.quality_score, ad_group_criterion.quality_info.creative_quality_score,
+            ad_group_criterion.quality_info.post_click_quality_score, ad_group_criterion.quality_info.search_predicted_ctr,
+            metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.search_impression_share,
+            metrics.search_top_impression_share, metrics.search_rank_lost_impression_share, metrics.search_budget_lost_impression_share
+            FROM keyword_view WHERE segments.date BETWEEN '{d0}' AND '{d1}' AND metrics.impressions > 0
+            ORDER BY metrics.impressions DESC LIMIT 40"""):
+            k = r.ad_group_criterion; qi = k.quality_info; m = r.metrics
+            print('|'.join(str(x) for x in [r.campaign.name, r.ad_group.name, k.keyword.text, k.keyword.match_type.name, k.status.name,
+                  'QS', qi.quality_score, 'ad関連性', qi.creative_quality_score.name, 'LP', qi.post_click_quality_score.name, '予測CTR', qi.search_predicted_ctr.name,
+                  'imp', m.impressions, 'clk', m.clicks, 'ctr', round(m.ctr * 100, 2), 'cpc', round(m.average_cpc / 1e6),
+                  'IS', round(m.search_impression_share * 100, 1) if m.search_impression_share else None,
+                  'topIS', round(m.search_top_impression_share * 100, 1) if m.search_top_impression_share else None,
+                  'rankLost', round(m.search_rank_lost_impression_share * 100, 1) if m.search_rank_lost_impression_share else None,
+                  'budgetLost', round(m.search_budget_lost_impression_share * 100, 1) if m.search_budget_lost_impression_share else None]))
+    print('\n##### 「腸活」を含むキーワードの検索語句（10/07-10/25）')
+    try:
+        for r in q("""SELECT search_term_view.search_term, segments.keyword.info.text, segments.keyword.info.match_type, ad_group.name,
+            metrics.impressions, metrics.clicks, metrics.ctr FROM search_term_view
+            WHERE segments.date BETWEEN '2026-10-07' AND '2026-10-25' AND segments.keyword.info.text LIKE '%腸活%'
+            ORDER BY metrics.impressions DESC LIMIT 50"""):
+            m = r.metrics
+            print('|'.join(str(x) for x in [r.search_term_view.search_term, 'KW=', r.segments.keyword.info.text, r.segments.keyword.info.match_type.name,
+                  r.ad_group.name, 'imp', m.impressions, 'clk', m.clicks, 'ctr', round(m.ctr * 100, 2)]))
+    except Exception as e:
+        print('ERROR', str(e)[:300])
+    print('\n##### 広告（RSA）と広告の強度')
+    for r in q("""SELECT campaign.name, ad_group.name, ad_group_ad.status, ad_group_ad.ad_strength, ad_group_ad.ad.responsive_search_ad.headlines,
+        ad_group_ad.ad.final_urls, metrics.impressions, metrics.clicks, metrics.ctr FROM ad_group_ad
+        WHERE ad_group_ad.status != 'REMOVED' AND campaign.advertising_channel_type = 'SEARCH' AND segments.date BETWEEN '2026-10-07' AND '2026-10-25'"""):
+        a = r.ad_group_ad.ad.responsive_search_ad
+        hs = [h.text for h in a.headlines]
+        print('|'.join(str(x) for x in [r.campaign.name, r.ad_group.name, r.ad_group_ad.status.name, r.ad_group_ad.ad_strength.name,
+              'imp', r.metrics.impressions, 'clk', r.metrics.clicks, 'ctr', round(r.metrics.ctr * 100, 2), 'URL', list(r.ad_group_ad.ad.final_urls),
+              '見出し数', len(hs), '腸活を含む見出し', [h for h in hs if '腸活' in h]]))
+    print('\n##### デバイス別（腸活系キーワード・10/07-10/25）')
+    for r in q("""SELECT ad_group_criterion.keyword.text, segments.device, metrics.impressions, metrics.clicks, metrics.ctr
+        FROM keyword_view WHERE segments.date BETWEEN '2026-10-07' AND '2026-10-25' AND ad_group_criterion.keyword.text LIKE '%腸活%' AND metrics.impressions > 0
+        ORDER BY metrics.impressions DESC"""):
+        m = r.metrics
+        print('|'.join(str(x) for x in [r.ad_group_criterion.keyword.text, r.segments.device.name, 'imp', m.impressions, 'clk', m.clicks, 'ctr', round(m.ctr * 100, 2)]))
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
