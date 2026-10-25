@@ -927,6 +927,39 @@ if MODE == 'kw_diag':
         print('|'.join(str(x) for x in [r.ad_group_criterion.keyword.text, r.segments.device.name, 'imp', m.impressions, 'clk', m.clicks, 'ctr', round(m.ctr * 100, 2)]))
     sys.exit(0)
 
+if MODE == 'kw_diag2':
+    # 読み取り専用：「腸活」系キーワードの週別推移、キャンペーン別のインプレッションシェア、直近の変更履歴
+    print('\n##### 「腸活」を含むキーワード（全キャンペーン・状態問わず）週別')
+    for r in q("""SELECT campaign.name, ad_group.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status,
+        segments.week, metrics.impressions, metrics.clicks, metrics.ctr FROM keyword_view
+        WHERE segments.date BETWEEN '2026-09-14' AND '2026-10-25' AND ad_group_criterion.keyword.text LIKE '%腸活%' AND metrics.impressions > 0
+        ORDER BY ad_group_criterion.keyword.text, segments.week"""):
+        m = r.metrics; k = r.ad_group_criterion
+        print('|'.join(str(x) for x in [k.keyword.text, k.keyword.match_type.name, k.status.name, r.campaign.name, r.ad_group.name, r.segments.week,
+              'imp', m.impressions, 'clk', m.clicks, 'ctr', round(m.ctr * 100, 2)]))
+    print('\n##### キャンペーン別 週別（検索）')
+    for r in q("""SELECT campaign.name, campaign.status, campaign.bidding_strategy_type, segments.week, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
+        metrics.search_impression_share, metrics.search_budget_lost_impression_share, metrics.search_rank_lost_impression_share
+        FROM campaign WHERE campaign.advertising_channel_type = 'SEARCH' AND segments.date BETWEEN '2026-09-14' AND '2026-10-25' AND metrics.impressions > 0
+        ORDER BY campaign.name, segments.week"""):
+        m = r.metrics
+        print('|'.join(str(x) for x in [r.campaign.name, r.campaign.status.name, r.campaign.bidding_strategy_type.name, r.segments.week, 'imp', m.impressions, 'clk', m.clicks,
+              'ctr', round(m.ctr * 100, 2), 'cpc', round(m.average_cpc / 1e6), 'IS', round(m.search_impression_share * 100, 1), 'budgetLost', round(m.search_budget_lost_impression_share * 100, 1),
+              'rankLost', round(m.search_rank_lost_impression_share * 100, 1)]))
+    print('\n##### 変更履歴（10/01〜）日別・種類別の件数')
+    try:
+        from collections import Counter
+        c = Counter()
+        for r in q("""SELECT change_event.change_date_time, change_event.change_resource_type, change_event.resource_change_operation, change_event.user_email
+            FROM change_event WHERE change_event.change_date_time >= '2026-10-01' AND change_event.change_date_time <= '2026-10-26'
+            ORDER BY change_event.change_date_time DESC LIMIT 10000"""):
+            e = r.change_event
+            c[(e.change_date_time[:10], e.change_resource_type.name, e.resource_change_operation.name)] += 1
+        for k in sorted(c): print(k, c[k])
+    except Exception as ex:
+        print('ERROR', str(ex)[:300])
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
