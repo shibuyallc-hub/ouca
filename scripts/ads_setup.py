@@ -843,6 +843,25 @@ if MODE == 'neg_extra':
             except GoogleAdsException as ex:
                 for e in ex.failure.errors[:5]: print('  FAILED -', e.message)
     sys.exit(0)
+if MODE == 'asset_perf':
+    D1, D2 = '2026-10-07', '2026-10-25'
+    def tryq(tag, gaql, fn):
+        try:
+            n = 0
+            for r in q(gaql):
+                fn(r); n += 1
+            print(f'#{tag} rows={n}')
+        except Exception as e:
+            print(f'#{tag} ERROR', str(e)[:300].replace('\n', ' '))
+    tryq('RSA', f"SELECT campaign.name, ad_group.name, ad_group_ad_asset_view.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.cost_micros FROM ad_group_ad_asset_view WHERE ad_group_ad_asset_view.field_type IN ('HEADLINE','DESCRIPTION') AND segments.date BETWEEN '{D1}' AND '{D2}' AND campaign.status != 'REMOVED'",
+         lambda r: print('RSA|', r.campaign.name, '|', r.ad_group.name, '|', r.ad_group_ad_asset_view.field_type.name, '|', r.asset.text_asset.text, '|', r.metrics.impressions, '|', r.metrics.clicks, '|', int(r.metrics.cost_micros/1e6)))
+    tryq('PMAX1', f"SELECT campaign.name, asset_group.name, asset_group_asset.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.interactions, metrics.conversions FROM asset_group_asset WHERE asset_group_asset.field_type IN ('HEADLINE','LONG_HEADLINE','DESCRIPTION') AND segments.date BETWEEN '{D1}' AND '{D2}' AND campaign.status != 'REMOVED'",
+         lambda r: print('PMAX|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group_asset.field_type.name, '|', r.asset.text_asset.text, '|', r.metrics.impressions, '|', r.metrics.interactions, '|', r.metrics.conversions))
+    tryq('SL', f"SELECT campaign.name, campaign_asset.field_type, asset.sitelink_asset.link_text, asset.callout_asset.callout_text, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign_asset.field_type IN ('SITELINK','CALLOUT') AND segments.date BETWEEN '{D1}' AND '{D2}' AND campaign.status != 'REMOVED'",
+         lambda r: print('EXT|', r.campaign.name, '|', r.campaign_asset.field_type.name, '|', r.asset.sitelink_asset.link_text, '|', r.asset.callout_asset.callout_text, '|', r.metrics.impressions, '|', r.metrics.clicks))
+    tryq('KW', f"SELECT campaign.name, ad_group.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, metrics.cost_micros, metrics.clicks, metrics.impressions FROM keyword_view WHERE segments.date BETWEEN '{D1}' AND '{D2}' AND campaign.status != 'REMOVED' AND metrics.impressions > 0",
+         lambda r: print('KW|', r.campaign.name, '|', r.ad_group.name, '|', r.ad_group_criterion.keyword.text, '|', r.ad_group_criterion.keyword.match_type.name, '|', int(r.metrics.cost_micros/1e6), '|', r.metrics.clicks, '|', r.metrics.impressions))
+    sys.exit(0)
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
