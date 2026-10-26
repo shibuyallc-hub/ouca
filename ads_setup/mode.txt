@@ -1,1 +1,1 @@
-intent_all
+verify
