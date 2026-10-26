@@ -965,7 +965,7 @@ if MODE in ('intent_list', 'intent_pilot', 'intent_all'):
     # 一致タイプは直接編集できないため、「同じ内容で新しい一致タイプを作成し、古いものを削除」する。
     from google.ads.googleads.errors import GoogleAdsException
     E = client.enums
-    print('KeywordMatchType members:', list(E.KeywordMatchTypeEnum.KeywordMatchType.__members__.keys()))
+    print('KeywordMatchType members:', [m.name for m in E.KeywordMatchTypeEnum])
     rows = q("""SELECT campaign.name, campaign.status, ad_group.name, ad_group.status, ad_group_criterion.criterion_id, ad_group_criterion.resource_name,
         ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status, ad_group_criterion.cpc_bid_micros,
         ad_group_criterion.final_urls, ad_group_criterion.final_mobile_urls, ad_group_criterion.final_url_suffix, ad_group_criterion.tracking_url_template
