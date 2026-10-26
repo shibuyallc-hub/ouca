@@ -960,6 +960,65 @@ if MODE == 'kw_diag2':
         print('ERROR', str(ex)[:300])
     sys.exit(0)
 
+if MODE in ('intent_list', 'intent_pilot', 'intent_all'):
+    # フレーズ一致のキーワードを「インテント マッチ」（API上は BROAD）へ変更する。
+    # 一致タイプは直接編集できないため、「同じ内容で新しい一致タイプを作成し、古いものを削除」する。
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    print('KeywordMatchType members:', list(E.KeywordMatchTypeEnum.KeywordMatchType.__members__.keys()))
+    rows = q("""SELECT campaign.name, campaign.status, ad_group.name, ad_group.status, ad_group_criterion.criterion_id, ad_group_criterion.resource_name,
+        ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status, ad_group_criterion.cpc_bid_micros,
+        ad_group_criterion.final_urls, ad_group_criterion.final_mobile_urls, ad_group_criterion.final_url_suffix, ad_group_criterion.tracking_url_template
+        FROM ad_group_criterion WHERE ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE
+        AND ad_group_criterion.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND campaign.status != 'REMOVED'""")
+    from collections import Counter
+    cnt = Counter((r.campaign.name, r.ad_group_criterion.keyword.match_type.name, r.ad_group_criterion.status.name) for r in rows)
+    for k in sorted(cnt): print('COUNT', k, cnt[k])
+    phrase = [r for r in rows if r.ad_group_criterion.keyword.match_type.name == 'PHRASE']
+    print('PHRASE total:', len(phrase), '/ with own bid:', sum(1 for r in phrase if r.ad_group_criterion.cpc_bid_micros),
+          '/ with own final_urls:', sum(1 for r in phrase if r.ad_group_criterion.final_urls),
+          '/ with suffix/tracking:', sum(1 for r in phrase if r.ad_group_criterion.final_url_suffix or r.ad_group_criterion.tracking_url_template))
+    if MODE == 'intent_list':
+        sys.exit(0)
+    have = {(r.ad_group.name, r.ad_group_criterion.keyword.text.lower()) for r in rows if r.ad_group_criterion.keyword.match_type.name == 'BROAD'}
+    targets = phrase
+    if MODE == 'intent_pilot':
+        targets = [r for r in phrase if r.ad_group.name == 'OUCA_supplement_ag_LP1' and r.ad_group_criterion.keyword.text == '腸活サプリ ランキング']
+        print('PILOT targets:', len(targets))
+    svc = client.get_service("AdGroupCriterionService")
+    def chunk(lst, n):
+        for i in range(0, len(lst), n): yield lst[i:i + n]
+    ok = fail = skipped = 0
+    for part in chunk(targets, 100):
+        ops = []
+        for r in part:
+            c0 = r.ad_group_criterion
+            rm = client.get_type("AdGroupCriterionOperation"); rm.remove = c0.resource_name; ops.append(rm)
+            if (r.ad_group.name, c0.keyword.text.lower()) in have:
+                skipped += 1; continue
+            op = client.get_type("AdGroupCriterionOperation"); c = op.create
+            c.ad_group = c0.resource_name.rsplit('~', 1)[0].replace('adGroupCriteria', 'adGroups')
+            c.status = c0.status
+            c.keyword.text = c0.keyword.text; c.keyword.match_type = E.KeywordMatchTypeEnum.BROAD
+            if c0.cpc_bid_micros: c.cpc_bid_micros = c0.cpc_bid_micros
+            for u in c0.final_urls: c.final_urls.append(u)
+            for u in c0.final_mobile_urls: c.final_mobile_urls.append(u)
+            if c0.final_url_suffix: c.final_url_suffix = c0.final_url_suffix
+            if c0.tracking_url_template: c.tracking_url_template = c0.tracking_url_template
+            ops.append(op)
+        try:
+            svc.mutate_ad_group_criteria(customer_id=CID, operations=ops)
+            ok += len(part)
+        except GoogleAdsException as ex:
+            fail += len(part)
+            for e in ex.failure.errors[:3]: print('FAILED -', e.message)
+    print(f'RESULT mode={MODE} converted={ok} failed={fail} skipped_dup={skipped}')
+    chk = q("""SELECT ad_group.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status
+        FROM ad_group_criterion WHERE ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'
+        AND ad_group.status != 'REMOVED' AND campaign.status != 'REMOVED'""")
+    cc = Counter(r.ad_group_criterion.keyword.match_type.name for r in chk); print('AFTER match types:', dict(cc))
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
