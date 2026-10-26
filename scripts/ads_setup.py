@@ -1019,6 +1019,43 @@ if MODE in ('intent_list', 'intent_pilot', 'intent_all'):
     cc = Counter(r.ad_group_criterion.keyword.match_type.name for r in chk); print('AFTER match types:', dict(cc))
     sys.exit(0)
 
+if MODE in ('exact_pause_list', 'exact_pause'):
+    # 同じ広告グループに「同じ文言のインテント マッチ（BROAD）」がある完全一致キーワードを、一時停止にする（削除はしない）
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    E = client.enums
+    rows = q("""SELECT campaign.name, campaign.status, ad_group.name, ad_group_criterion.resource_name, ad_group_criterion.keyword.text,
+        ad_group_criterion.keyword.match_type, ad_group_criterion.status FROM ad_group_criterion
+        WHERE ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'
+        AND ad_group.status != 'REMOVED' AND campaign.status != 'REMOVED'""")
+    norm = lambda t: ' '.join(t.lower().split())
+    broad = {(r.ad_group.name, norm(r.ad_group_criterion.keyword.text)) for r in rows if r.ad_group_criterion.keyword.match_type.name == 'BROAD'}
+    ex = [r for r in rows if r.ad_group_criterion.keyword.match_type.name == 'EXACT']
+    both = [r for r in ex if (r.ad_group.name, norm(r.ad_group_criterion.keyword.text)) in broad]
+    todo = [r for r in both if r.ad_group_criterion.status.name == 'ENABLED']
+    print(f'EXACT total={len(ex)} / 同文言のインテント マッチあり={len(both)} / うち有効（停止対象）={len(todo)} / 対象外（同文言なし）={len(ex) - len(both)}')
+    for r in ex:
+        if r not in both: print('NOT-PAIRED|', r.campaign.name, r.ad_group.name, r.ad_group_criterion.keyword.text)
+    if MODE == 'exact_pause' and todo:
+        svc = client.get_service("AdGroupCriterionService"); ok = fail = 0
+        for i in range(0, len(todo), 100):
+            ops = []
+            for r in todo[i:i + 100]:
+                op = client.get_type("AdGroupCriterionOperation"); c = op.update
+                c.resource_name = r.ad_group_criterion.resource_name; c.status = E.AdGroupCriterionStatusEnum.PAUSED
+                client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, c._pb)); ops.append(op)
+            try:
+                svc.mutate_ad_group_criteria(customer_id=CID, operations=ops); ok += len(ops)
+            except GoogleAdsException as e:
+                fail += len(ops)
+                for er in e.failure.errors[:3]: print('FAILED -', er.message)
+        print(f'RESULT paused={ok} failed={fail}')
+        from collections import Counter
+        chk = q("""SELECT ad_group_criterion.keyword.match_type, ad_group_criterion.status FROM ad_group_criterion WHERE ad_group_criterion.type = 'KEYWORD'
+            AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND campaign.status != 'REMOVED'""")
+        print('AFTER:', dict(Counter((r.ad_group_criterion.keyword.match_type.name, r.ad_group_criterion.status.name) for r in chk)))
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
