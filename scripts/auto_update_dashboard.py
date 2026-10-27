@@ -449,10 +449,12 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
             payload = resp.json()
 
             for row in payload.get('data', []):
-                purchases = 0
+                # Metaは同じ購入を 'purchase' と 'omni_purchase' の両方で返すため、足すと2倍になる。omni_purchase を優先し、無ければ purchase を使う
+                _pc = {}
                 for action in row.get('actions', []):
                     if action.get('action_type') in ('purchase', 'omni_purchase'):
-                        purchases += int(float(action.get('value', 0)))
+                        _pc[action['action_type']] = int(float(action.get('value', 0)))
+                purchases = _pc.get('omni_purchase', _pc.get('purchase', 0))
 
                 meta_ads_ad_data.append({
                     'date': row['date_start'].replace('-', ''),
@@ -489,10 +491,12 @@ if META_ACCESS_TOKEN and META_AD_ACCOUNT_ID:
             payload = resp.json()
 
             for row in payload.get('data', []):
-                purchases = 0
+                # Metaは同じ購入を 'purchase' と 'omni_purchase' の両方で返すため、足すと2倍になる。omni_purchase を優先し、無ければ purchase を使う
+                _pc = {}
                 for action in row.get('actions', []):
                     if action.get('action_type') in ('purchase', 'omni_purchase'):
-                        purchases += int(float(action.get('value', 0)))
+                        _pc[action['action_type']] = int(float(action.get('value', 0)))
+                purchases = _pc.get('omni_purchase', _pc.get('purchase', 0))
 
                 meta_ads_demo_data.append({
                     'date': row['date_start'].replace('-', ''),
