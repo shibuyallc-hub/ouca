@@ -762,6 +762,32 @@ if MODE == 'copy_scan':
     for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group_asset.field_type, asset.name, asset.image_asset.full_size.url FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND asset.type = 'IMAGE'"):
         print('IMG|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group_asset.field_type.name, '|', r.asset.name, '|', r.asset.image_asset.full_size.url)
     sys.exit(0)
+if MODE == 'price_scan':
+    # 価格・数量・初回特典の表記が残っている広告文／アセットを洗い出す（読み取りのみ）
+    import re as _re
+    PAT = _re.compile(r'\d+%|％|OFF|オフ|割引|初回|19,?980|16,?983|10,?800|4,?320|666|360|円|粒|袋|箱|1ヶ月|1か月|ヶ月分|定期|送料|限定|キャンペーン|お試し|トライアル')
+    def chk(tag, where, text):
+        if text and PAT.search(text):
+            print('HIT|', tag, '|', where, '|', text)
+    print("== RSA ads ==")
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        tag = f"{r.campaign.name}[{r.campaign.status.name}]/{r.ad_group.name}/ad{r.ad_group_ad.ad.id}[{r.ad_group_ad.status.name}]"
+        print('AD|', tag, '|', list(r.ad_group_ad.ad.final_urls))
+        for i, h in enumerate(r.ad_group_ad.ad.responsive_search_ad.headlines): chk(tag, f'headline{i+1}', h.text)
+        for i, d in enumerate(r.ad_group_ad.ad.responsive_search_ad.descriptions): chk(tag, f'description{i+1}', d.text)
+    print("== asset group assets ==")
+    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group.status, asset_group_asset.field_type, asset_group_asset.asset, asset.text_asset.text FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND asset.type = 'TEXT'"):
+        chk(f"{r.campaign.name}[{r.campaign.status.name}]/{r.asset_group.name}[{r.asset_group.status.name}]", r.asset_group_asset.field_type.name + ' ' + r.asset_group_asset.asset, r.asset.text_asset.text)
+    print("== sitelink / callout / snippet / promotion / price assets (account-wide) ==")
+    for r in q("SELECT asset.id, asset.resource_name, asset.type, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2, asset.callout_asset.callout_text, asset.structured_snippet_asset.values, asset.promotion_asset.promotion_target, asset.promotion_asset.percent_off, asset.promotion_asset.money_amount_off.amount_micros, asset.price_asset.type FROM asset WHERE asset.type IN ('SITELINK', 'CALLOUT', 'STRUCTURED_SNIPPET', 'PROMOTION', 'PRICE')"):
+        a = r.asset
+        for w, t in (('sl_text', a.sitelink_asset.link_text), ('sl_d1', a.sitelink_asset.description1), ('sl_d2', a.sitelink_asset.description2), ('callout', a.callout_asset.callout_text), ('snippet', ' / '.join(a.structured_snippet_asset.values)), ('promo', a.promotion_asset.promotion_target)):
+            chk(f'asset{a.id}[{a.type_.name}]', w, t)
+        if a.type_.name in ('PROMOTION', 'PRICE'): print('HIT|', f'asset{a.id}[{a.type_.name}]', '|', a.resource_name, '| percent_off', a.promotion_asset.percent_off, 'money_off', a.promotion_asset.money_amount_off.amount_micros)
+    print("== which campaigns use those assets ==")
+    for r in q("SELECT campaign.name, campaign.status, campaign_asset.field_type, campaign_asset.status, asset.id FROM campaign_asset WHERE campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND campaign_asset.field_type IN ('SITELINK','CALLOUT','STRUCTURED_SNIPPET','PROMOTION','PRICE')"):
+        print('LINK|', r.campaign.name, r.campaign.status.name, r.campaign_asset.field_type.name, r.campaign_asset.status.name, 'asset', r.asset.id)
+    sys.exit(0)
 if MODE == 'callout_use':
     for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
                    ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),
