@@ -1,1 +1,1 @@
-rsa_sync_list
+rsa_sync
