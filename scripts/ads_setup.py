@@ -967,6 +967,52 @@ if MODE in ('rsa_sync_list', 'rsa_sync'):
         except GoogleAdsException as ex:
             for e in ex.failure.errors[:3]: print('  FAILED', ad.id, '|', e.message)
     print('done', MODE); sys.exit(0)
+if MODE in ('perday_list', 'perday_fix'):
+    # 「1日約288円」→「1日約720円」（通常価格10,800円÷15日）。検索広告・P-Max（全キャンペーン）
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    APPLY = (MODE == 'perday_fix'); E = client.enums
+    mp = lambda t: t.replace('約288円', '約720円')
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group_ad.ad.id, ad_group_ad.ad.resource_name, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        ad = r.ad_group_ad.ad; rsa = ad.responsive_search_ad
+        diffs = [(x.text, mp(x.text)) for x in list(rsa.headlines) + list(rsa.descriptions) if mp(x.text) != x.text]
+        if not diffs: continue
+        print('RSA|', ad.id, r.campaign.name, r.campaign.status.name, '|', r.ad_group.name)
+        for a, b in diffs: print('    ', a, '=>', b)
+        if not APPLY: continue
+        op = client.get_type("AdOperation"); u = op.update; u.resource_name = ad.resource_name
+        for coll, name in ((rsa.headlines, 'headlines'), (rsa.descriptions, 'descriptions')):
+            seen = set()
+            for x in coll:
+                t = mp(x.text)
+                if t in seen: continue
+                seen.add(t); n = client.get_type("AdTextAsset"); n.text = t
+                if x.pinned_field: n.pinned_field = x.pinned_field
+                getattr(u.responsive_search_ad, name).append(n)
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        try:
+            client.get_service("AdService").mutate_ads(customer_id=CID, operations=[op]); print('  OK updated', ad.id)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED', ad.id, '|', e.message)
+    text_assets = {}
+    for r in q("SELECT asset.resource_name, asset.text_asset.text FROM asset WHERE asset.type = 'TEXT'"): text_assets[r.asset.text_asset.text] = r.asset.resource_name
+    FT = {'HEADLINE': E.AssetFieldTypeEnum.HEADLINE, 'LONG_HEADLINE': E.AssetFieldTypeEnum.LONG_HEADLINE, 'DESCRIPTION': E.AssetFieldTypeEnum.DESCRIPTION}
+    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group.resource_name, asset_group_asset.resource_name, asset_group_asset.field_type, asset.text_asset.text FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND asset.type = 'TEXT'"):
+        t = r.asset.text_asset.text; n = mp(t); ft = r.asset_group_asset.field_type.name
+        if n == t or ft not in FT: continue
+        print('PMAX|', r.campaign.name, r.campaign.status.name, '|', r.asset_group.name, '|', ft, '|', t, '=>', n)
+        if not APPLY: continue
+        try:
+            if n not in text_assets:
+                op = client.get_type("AssetOperation"); op.create.text_asset.text = n
+                text_assets[n] = client.get_service("AssetService").mutate_assets(customer_id=CID, operations=[op]).results[0].resource_name
+            ops = []
+            m = client.get_type("MutateOperation"); m.asset_group_asset_operation.remove = r.asset_group_asset.resource_name; ops.append(m)
+            m2 = client.get_type("MutateOperation"); c = m2.asset_group_asset_operation.create; c.asset_group = r.asset_group.resource_name; c.asset = text_assets[n]; c.field_type = FT[ft]; ops.append(m2)
+            ga.mutate(customer_id=CID, mutate_operations=ops); print('  OK swap', ft, r.asset_group.name)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED', ft, '|', e.message)
+    print('done', MODE); sys.exit(0)
 if MODE == 'callout_use':
     for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
                    ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),
