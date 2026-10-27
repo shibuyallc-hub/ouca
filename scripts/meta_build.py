@@ -29,6 +29,49 @@ SPEC = {
              ads=[('LP2-A_投資', 'lp2_sq_man'), ('LP2-B_価格の理由', 'lp2_sq_bag'), ('LP2-C_品質', 'lp2_sq_pouches')]),
 }
 
+if MODE == 'noop': sys.exit(0)
+if MODE in ('edit_list', 'edit'):
+    # 配信中の既存広告の文面を差し替え（新しいクリエイティブを作って広告に付け替える）。一時停止中の広告は対象外
+    import functools
+    APPLY = (MODE == 'edit')
+    TARGETS = ('c-1_', 'c-2_', 'a-2_', 'b-1_', 'b-2_')
+    RULES = [('1ヶ月19,980円（初回15%OFFで16,983円）', '1袋10,800円（初回60%OFFで4,320円）'),
+             ('1ヶ月19,980円。1日あたりに直すと、約666円です。', '1袋10,800円。1日あたりに直すと、約720円です。初回は4,320円。'),
+             ('1ヶ月19,980円', '1袋10,800円'), ('1日約666円', '1日約720円'),
+             ('2粒で酪酸発酵物222mg', '1粒で酪酸発酵物111mg'), ('2粒に酪酸発酵物222mg', '1粒に酪酸発酵物111mg'),
+             ('2粒に222mg', '1粒に111mg'), ('2粒222mg', '1粒111mg'), ('15%OFF', '60%OFF'),
+             ('まずは1ヶ月', 'まずは1袋'), ('まず1ヶ月', 'まず1袋'), ('1ヶ月試して', '1袋試して')]
+    fix = lambda t: functools.reduce(lambda x, r: x.replace(*r), RULES, t)
+    changes = []
+    def walk(o):
+        if isinstance(o, str):
+            n = fix(o)
+            if n != o: changes.append((o, n))
+            return n
+        if isinstance(o, list): return [walk(x) for x in o]
+        if isinstance(o, dict): return {k: walk(v) for k, v in o.items()}
+        return o
+    ads = (call('GET', f'{ACC}/ads', params={'fields': 'id,name,effective_status,status,campaign{name},creative{id,name,object_story_spec,asset_feed_spec,url_tags,degrees_of_freedom_spec,platform_customizations}', 'limit': 200}) or {}).get('data', [])
+    for a in ads:
+        if a['campaign']['name'] != 'OUCA' or a.get('status') != 'ACTIVE' or not a['name'].startswith(TARGETS): continue
+        cr = a['creative']; changes.clear()
+        oss = walk(cr.get('object_story_spec')) if cr.get('object_story_spec') else None
+        afs = walk(cr.get('asset_feed_spec')) if cr.get('asset_feed_spec') else None
+        print('AD|', a['id'], a['name'], '| old creative', cr['id'], '| keys', [k for k in cr if k not in ('id',)], '|', len(changes), 'text changes')
+        if not changes: continue
+        for o, n in changes[:40]: print('    ', o.replace('\n', ' / ')[:150], '=>', n.replace('\n', ' / ')[:150])
+        if not APPLY: continue
+        data = {'name': cr['name'] + '_v2'}
+        if oss: data['object_story_spec'] = json.dumps(oss)
+        if afs: data['asset_feed_spec'] = json.dumps(afs)
+        if cr.get('url_tags'): data['url_tags'] = cr['url_tags']
+        if cr.get('degrees_of_freedom_spec'): data['degrees_of_freedom_spec'] = json.dumps(cr['degrees_of_freedom_spec'])
+        if cr.get('platform_customizations'): data['platform_customizations'] = json.dumps(cr['platform_customizations'])
+        new = call('POST', f'{ACC}/adcreatives', data)
+        if not new: print('  FAILED create creative for', a['name']); continue
+        r = call('POST', a['id'], {'creative': json.dumps({'creative_id': new['id']})})
+        print('  ', 'OK' if r else 'FAILED', 'ad', a['name'], 'creative', cr['id'], '->', new['id'])
+    print('done', MODE); sys.exit(0)
 if MODE == 'cleanup':
     for k, sp in SPEC.items():
         cid = existing.get(sp['camp'])
