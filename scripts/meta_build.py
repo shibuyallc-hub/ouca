@@ -30,6 +30,12 @@ SPEC = {
 }
 
 if MODE == 'noop': sys.exit(0)
+if MODE == 'scrape':
+    # リンクプレビューのキャッシュ更新（OGPの再取得）。広告の設定は変えない
+    for u in ('https://ouca.today/lp?u=lp-executive', 'https://ouca.today/lp?u=lp-supplement'):
+        r = requests.post(f'{BASE}/', data={'id': u, 'scrape': 'true', 'access_token': TOKEN}, timeout=90).json()
+        print('SCRAPE|', u, '|', json.dumps({k: r.get(k) for k in ('title', 'description', 'updated_time', 'error')}, ensure_ascii=False)[:500])
+    sys.exit(0)
 if MODE == 'perm':
     print('PERM|', json.dumps(call('GET', 'me/permissions') or {}, ensure_ascii=False))
     print('ME|', json.dumps(call('GET', 'me', params={'fields': 'id,name'}) or {}, ensure_ascii=False))
