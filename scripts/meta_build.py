@@ -30,6 +30,13 @@ SPEC = {
 }
 
 if MODE == 'noop': sys.exit(0)
+if MODE == 'perm':
+    print('PERM|', json.dumps(call('GET', 'me/permissions') or {}, ensure_ascii=False))
+    print('ME|', json.dumps(call('GET', 'me', params={'fields': 'id,name'}) or {}, ensure_ascii=False))
+    print('ACC|', json.dumps(call('GET', ACC, params={'fields': 'id,name,account_status,currency,business{id,name}'}) or {}, ensure_ascii=False))
+    print('CAN|', json.dumps(call('GET', f'{ACC}/assigned_users', params={'fields': 'id,name,tasks', 'business': ''}) or {}, ensure_ascii=False)[:600])
+    print('PAGES|', json.dumps(call('GET', 'me/accounts', params={'fields': 'id,name,tasks', 'limit': 20}) or {}, ensure_ascii=False)[:800])
+    sys.exit(0)
 if MODE in ('edit_list', 'edit'):
     # 配信中の既存広告の文面を差し替え（新しいクリエイティブを作って広告に付け替える）。一時停止中の広告は対象外
     import functools
