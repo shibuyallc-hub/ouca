@@ -913,6 +913,14 @@ if MODE in ('copy_update_list', 'copy_update'):
         mut('swap callout in ' + r.campaign.name, do)
     print('done', MODE)
     sys.exit(0)
+if MODE == 'rsa_dump':
+    # 検索広告の全文（見出し・説明文・ピン留め）を出力（読み取りのみ）
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2 FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        a = r.ad_group_ad.ad; rsa = a.responsive_search_ad
+        print('RSA|', a.id, '|', r.campaign.name, r.campaign.status.name, '|', r.ad_group.name, '|', r.ad_group_ad.status.name, '|', list(a.final_urls), '| path', rsa.path1, rsa.path2)
+        for i, h in enumerate(rsa.headlines): print('  H%d|%s|%s' % (i + 1, h.pinned_field.name if h.pinned_field else '', h.text))
+        for i, d in enumerate(rsa.descriptions): print('  D%d|%s|%s' % (i + 1, d.pinned_field.name if d.pinned_field else '', d.text))
+    sys.exit(0)
 if MODE == 'callout_use':
     for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
                    ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),
