@@ -921,6 +921,50 @@ if MODE == 'rsa_dump':
         for i, h in enumerate(rsa.headlines): print('  H%d|%s|%s' % (i + 1, h.pinned_field.name if h.pinned_field else '', h.text))
         for i, d in enumerate(rsa.descriptions): print('  D%d|%s|%s' % (i + 1, d.pinned_field.name if d.pinned_field else '', d.text))
     sys.exit(0)
+if MODE in ('rsa_sync_list', 'rsa_sync'):
+    # 手直し済みの広告(825650261957)の文言に合わせて、他の検索広告(一時停止中のキャンペーン含む)を更新
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    APPLY = (MODE == 'rsa_sync'); SKIP_AD = 825650261957
+    P1, P2 = '1袋10,800円。初回4,320円', '1袋10,800円。高いのには理由があります。菌でなく酪酸を1粒に111mg配合。'
+    MAP = {
+      '1ヶ月19,980円。理由がある': P1, '通常10,800円。理由がある': P1,
+      '1日約666円という選び方': '1日約288円という選び方',
+      '初回15%OFF 16,983円': '初回60%OFF 4,320円',
+      'まず1ヶ月、自分に投資する': 'まず1袋、自分に投資する',
+      'まずは1ヶ月、試してみる': 'まずは1袋、試してみる',
+      '初回15%OFFで始める腸活': '初回60%OFFで始める腸活',
+      '2粒に酪酸発酵物222mg': '1粒に酪酸発酵物111mg',
+      '1ヶ月19,980円。高いのには理由があります。菌でなく酪酸を2粒に222mg配合。': P2,
+      '通常10,800円。高いのには理由があります。菌でなく酪酸を1粒に111mg配合。': P2,
+      '1日あたり約666円。安さでは選ばない、そう決めている方への酪酸サプリです。初回15%OFF。': '1日あたり約288円。安さでは選ばない、そう決めている方への酪酸サプリです。初回60%OFF。',
+      '会社には投資する。自分には？経営者のためのハイエンドサプリメント。1日約666円。': '会社には投資する。自分には？経営者のためのハイエンドサプリメント。1日約288円。',
+      '安いサプリを何年も続けるより、まず1ヶ月。人生を美しく謳歌するためのOUCA。': '安いサプリを何年も続けるより、まず1袋。人生を美しく謳歌するためのOUCA。',
+      '菌ではなく、約1000日発酵させた酪酸発酵物そのものを届けます。初回15%OFF。': '菌ではなく、約1000日発酵させた酪酸発酵物そのものを届けます。初回60%OFF。',
+    }
+    mp = lambda t: MAP.get(t, t)
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group_ad.ad.id, ad_group_ad.ad.resource_name, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        ad = r.ad_group_ad.ad; rsa = ad.responsive_search_ad
+        if ad.id == SKIP_AD: continue
+        diffs = [(x.text, mp(x.text)) for x in list(rsa.headlines) + list(rsa.descriptions) if mp(x.text) != x.text]
+        print('RSA|', ad.id, r.campaign.name, r.campaign.status.name, '|', r.ad_group.name, '|', len(diffs), 'changes')
+        for a, b in diffs: print('    ', a, '=>', b)
+        if not diffs or not APPLY: continue
+        op = client.get_type("AdOperation"); u = op.update; u.resource_name = ad.resource_name
+        for coll, name in ((rsa.headlines, 'headlines'), (rsa.descriptions, 'descriptions')):
+            seen = set()
+            for x in coll:
+                t = mp(x.text)
+                if t in seen: continue
+                seen.add(t); n = client.get_type("AdTextAsset"); n.text = t
+                if x.pinned_field: n.pinned_field = x.pinned_field
+                getattr(u.responsive_search_ad, name).append(n)
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        try:
+            client.get_service("AdService").mutate_ads(customer_id=CID, operations=[op]); print('  OK updated', ad.id)
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED', ad.id, '|', e.message)
+    print('done', MODE); sys.exit(0)
 if MODE == 'callout_use':
     for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
                    ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),
