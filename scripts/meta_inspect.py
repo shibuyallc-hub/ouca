@@ -26,3 +26,5 @@ for a in ads:
     for k, t in texts:
         print('   TXT|', k, '|', t.replace('\n', ' / '))
         if PAT.search(t): print('   HIT|', tag, '|', k, '|', t.replace('\n', ' / '))
+
+# rerun 1793111144

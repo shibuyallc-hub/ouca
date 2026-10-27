@@ -788,6 +788,131 @@ if MODE == 'price_scan':
     for r in q("SELECT campaign.name, campaign.status, campaign_asset.field_type, campaign_asset.status, asset.id FROM campaign_asset WHERE campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED' AND campaign_asset.field_type IN ('SITELINK','CALLOUT','STRUCTURED_SNIPPET','PROMOTION','PRICE')"):
         print('LINK|', r.campaign.name, r.campaign.status.name, r.campaign_asset.field_type.name, r.campaign_asset.status.name, 'asset', r.asset.id)
     sys.exit(0)
+if MODE in ('copy_update_list', 'copy_update'):
+    # 価格・数量表記の更新（配信中の3キャンペーンのみ）。copy_update_list は計画の表示だけ、copy_update が実行
+    from google.ads.googleads.errors import GoogleAdsException
+    from google.api_core import protobuf_helpers
+    APPLY = (MODE == 'copy_update'); E = client.enums
+    CAMPS = ('OUCA_supplement_search', 'ouca_supplement_pmax_LP1', 'ouca_supplement_pmax_LP2')
+    CQ = ",".join("'%s'" % c for c in CAMPS)
+    MAP = {
+      '1ヶ月19,980円。理由がある': '通常10,800円。理由がある',
+      '1日約666円という選び方': '1日約288円という選び方',
+      '初回15%OFF 16,983円': '初回60%OFF 4,320円',
+      'まず1ヶ月、自分に投資する': 'まず1袋、自分に投資する',
+      'まずは1ヶ月、試してみる': 'まずは1袋、試してみる',
+      '初回15%OFFで始める腸活': '初回60%OFFで始める腸活',
+      '2粒に酪酸発酵物222mg': '1粒に酪酸発酵物111mg',
+      '1ヶ月19,980円。高いのには理由があります。菌でなく酪酸を2粒に222mg配合。': '通常10,800円。高いのには理由があります。菌でなく酪酸を1粒に111mg配合。',
+      '1日あたり約666円。安さでは選ばない、そう決めている方への酪酸サプリです。初回15%OFF。': '1日あたり約288円。安さでは選ばない、そう決めている方への酪酸サプリです。初回60%OFF。',
+      '会社には投資する。自分には？経営者のためのハイエンドサプリメント。1日約666円。': '会社には投資する。自分には？経営者のためのハイエンドサプリメント。1日約288円。',
+      '会社には投資する。自分には？初回15%OFF。': '会社には投資する。自分には？初回60%OFF。',
+      '安いサプリを何年も続けるより、まず1ヶ月。人生を美しく謳歌するためのOUCA。': '安いサプリを何年も続けるより、まず1袋。人生を美しく謳歌するためのOUCA。',
+      '菌ではなく、約1000日発酵させた酪酸発酵物そのものを届けます。初回15%OFF。': '菌ではなく、約1000日発酵させた酪酸発酵物そのものを届けます。初回60%OFF。',
+      '1日あたり約666円。安さで選ばない、そんな基準で選ぶ酪酸サプリです。': '1日あたり約288円。安さで選ばない、そんな基準で選ぶ酪酸サプリです。',
+      '安いサプリを続ける前に、まず1ヶ月。初回15%OFFで、丁寧に試せます。': '安いサプリを続ける前に、まず1袋。初回60%OFFで、丁寧に試せます。',
+      '1日約666円。毎月300個限定生産のハイエンドサプリメントOUCA supplement。': '1日約288円。毎月300個限定生産のハイエンドサプリメントOUCA supplement。',
+      '高い。だが、中身が違います。菌でなく酪酸そのものを2粒に222mg。': '高い。だが、中身が違います。菌でなく酪酸そのものを1粒に111mg。',
+      '説明はいらない、結果で選ぶ。国内GMP工場製造、101種の成分を2粒に。': '説明はいらない、結果で選ぶ。国内GMP工場製造、101種の成分を1粒に。',
+      '説明はいらない、中身で選ぶ。国内GMP工場製造、101種の成分を2粒に。': '説明はいらない、中身で選ぶ。国内GMP工場製造、101種の成分を1粒に。',
+      # サイトリンク・コールアウト
+      '初回15%OFF・送料無料': '初回60%OFF・送料無料',
+      '¥19,980／30日分': '¥4,320（通常¥10,800）',
+      '1日1〜3粒。まずは1ヶ月から': '1日1〜3粒。まずは1袋から',
+      '初回15%OFF': '初回60%OFF',
+    }
+    def mp(t): return MAP.get(t, t)
+    def mut(label, fn):
+        if not APPLY: print('  (dry-run)', label); return None
+        try:
+            r = fn(); print('  OK', label); return r
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED', label, '|', e.message)
+    # --- 1) 検索広告（その場で更新）---
+    print('== RSA ==')
+    for r in q(f"SELECT campaign.name, ad_group.name, ad_group_ad.ad.resource_name, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions FROM ad_group_ad WHERE campaign.name = 'OUCA_supplement_search' AND ad_group_ad.status != 'REMOVED'"):
+        ad = r.ad_group_ad.ad; rsa = ad.responsive_search_ad
+        ch = [(h.text, mp(h.text)) for h in rsa.headlines]; cd = [(d.text, mp(d.text)) for d in rsa.descriptions]
+        diffs = [(a, b) for a, b in ch + cd if a != b]
+        print('RSA|', r.ad_group.name, '|', len(diffs), 'changes')
+        for a, b in diffs: print('   ', a, '=>', b)
+        if not diffs: continue
+        def do(ad=ad, rsa=rsa):
+            op = client.get_type("AdOperation"); u = op.update; u.resource_name = ad.resource_name
+            seen = set()
+            for h in rsa.headlines:
+                t = mp(h.text)
+                if t in seen: continue
+                seen.add(t); x = client.get_type("AdTextAsset"); x.text = t
+                if h.pinned_field: x.pinned_field = h.pinned_field
+                u.responsive_search_ad.headlines.append(x)
+            seen = set()
+            for d in rsa.descriptions:
+                t = mp(d.text)
+                if t in seen: continue
+                seen.add(t); x = client.get_type("AdTextAsset"); x.text = t
+                if d.pinned_field: x.pinned_field = d.pinned_field
+                u.responsive_search_ad.descriptions.append(x)
+            client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+            return client.get_service("AdService").mutate_ads(customer_id=CID, operations=[op])
+        mut('update RSA ' + r.ad_group.name, do)
+    # --- 2) P-Max の文章アセット（新アセットに差し替え）---
+    print('== PMAX text ==')
+    text_assets = {}
+    for r in q("SELECT asset.resource_name, asset.text_asset.text FROM asset WHERE asset.type = 'TEXT'"): text_assets[r.asset.text_asset.text] = r.asset.resource_name
+    FT = {'HEADLINE': E.AssetFieldTypeEnum.HEADLINE, 'LONG_HEADLINE': E.AssetFieldTypeEnum.LONG_HEADLINE, 'DESCRIPTION': E.AssetFieldTypeEnum.DESCRIPTION}
+    def get_text_asset(t):
+        if t in text_assets: return text_assets[t]
+        op = client.get_type("AssetOperation"); op.create.text_asset.text = t
+        rn = client.get_service("AssetService").mutate_assets(customer_id=CID, operations=[op]).results[0].resource_name
+        text_assets[t] = rn; return rn
+    for r in q(f"SELECT campaign.name, asset_group.name, asset_group.resource_name, asset_group_asset.resource_name, asset_group_asset.field_type, asset.text_asset.text FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND campaign.name IN ({CQ}) AND asset.type = 'TEXT'"):
+        t = r.asset.text_asset.text; n = mp(t); ft = r.asset_group_asset.field_type.name
+        if n == t or ft not in FT: continue
+        print('PMAX|', r.campaign.name, '|', ft, '|', t, '=>', n)
+        def do(r=r, n=n, ft=ft):
+            if APPLY: new_rn = get_text_asset(n)
+            ops = []
+            m = client.get_type("MutateOperation"); m.asset_group_asset_operation.remove = r.asset_group_asset.resource_name; ops.append(m)
+            m2 = client.get_type("MutateOperation"); c = m2.asset_group_asset_operation.create; c.asset_group = r.asset_group.resource_name; c.asset = new_rn; c.field_type = FT[ft]; ops.append(m2)
+            return ga.mutate(customer_id=CID, mutate_operations=ops)
+        mut(f'swap {ft} in {r.asset_group.name}', do)
+    # --- 3) サイトリンク（新アセットを作って、キャンペーンの紐づけを入れ替え）---
+    print('== SITELINK ==')
+    sl_new = {}
+    for r in q(f"SELECT campaign.name, campaign.resource_name, campaign_asset.resource_name, asset.id, asset.final_urls, asset.final_mobile_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED' AND campaign.name IN ({CQ})"):
+        sa = r.asset.sitelink_asset; a, b, c_ = mp(sa.link_text), mp(sa.description1), mp(sa.description2)
+        if (a, b, c_) == (sa.link_text, sa.description1, sa.description2): continue
+        print('SITELINK|', r.campaign.name, '| asset', r.asset.id, '|', [sa.link_text, sa.description1, sa.description2], '=>', [a, b, c_])
+        def do(r=r, sa=sa, a=a, b=b, c_=c_):
+            key = (r.asset.id, a, b, c_)
+            if key not in sl_new:
+                op = client.get_type("AssetOperation"); x = op.create; x.sitelink_asset.link_text = a; x.sitelink_asset.description1 = b; x.sitelink_asset.description2 = c_
+                x.final_urls.extend(list(r.asset.final_urls)); x.final_mobile_urls.extend(list(r.asset.final_mobile_urls))
+                sl_new[key] = client.get_service("AssetService").mutate_assets(customer_id=CID, operations=[op]).results[0].resource_name
+            ops = []
+            o1 = client.get_type("CampaignAssetOperation"); o1.create.campaign = r.campaign.resource_name; o1.create.asset = sl_new[key]; o1.create.field_type = E.AssetFieldTypeEnum.SITELINK; ops.append(o1)
+            o2 = client.get_type("CampaignAssetOperation"); o2.remove = r.campaign_asset.resource_name; ops.append(o2)
+            return client.get_service("CampaignAssetService").mutate_campaign_assets(customer_id=CID, operations=ops)
+        mut('swap sitelink in ' + r.campaign.name, do)
+    # --- 4) コールアウト ---
+    print('== CALLOUT ==')
+    co_new = {}
+    for r in q(f"SELECT campaign.name, campaign.resource_name, campaign_asset.resource_name, asset.id, asset.callout_asset.callout_text FROM campaign_asset WHERE campaign_asset.field_type = 'CALLOUT' AND campaign_asset.status != 'REMOVED' AND campaign.name IN ({CQ})"):
+        t = r.asset.callout_asset.callout_text; n = mp(t)
+        if n == t: continue
+        print('CALLOUT|', r.campaign.name, '| asset', r.asset.id, '|', t, '=>', n)
+        def do(r=r, n=n):
+            if n not in co_new:
+                op = client.get_type("AssetOperation"); op.create.callout_asset.callout_text = n
+                co_new[n] = client.get_service("AssetService").mutate_assets(customer_id=CID, operations=[op]).results[0].resource_name
+            ops = []
+            o1 = client.get_type("CampaignAssetOperation"); o1.create.campaign = r.campaign.resource_name; o1.create.asset = co_new[n]; o1.create.field_type = E.AssetFieldTypeEnum.CALLOUT; ops.append(o1)
+            o2 = client.get_type("CampaignAssetOperation"); o2.remove = r.campaign_asset.resource_name; ops.append(o2)
+            return client.get_service("CampaignAssetService").mutate_campaign_assets(customer_id=CID, operations=ops)
+        mut('swap callout in ' + r.campaign.name, do)
+    print('done', MODE)
+    sys.exit(0)
 if MODE == 'callout_use':
     for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
                    ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),

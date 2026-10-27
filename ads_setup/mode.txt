@@ -1,1 +1,1 @@
-price_scan
+copy_update_list
