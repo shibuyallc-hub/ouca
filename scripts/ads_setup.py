@@ -1013,6 +1013,22 @@ if MODE in ('perday_list', 'perday_fix'):
         except GoogleAdsException as ex:
             for e in ex.failure.errors[:3]: print('  FAILED', ft, '|', e.message)
     print('done', MODE); sys.exit(0)
+if MODE == 'bid_info':
+    # 入札戦略・コンバージョン目標の確認（読み取りのみ）
+    for r in q("SELECT campaign.name, campaign.status, campaign.advertising_channel_type, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.maximize_conversion_value.target_roas, campaign.target_cpa.target_cpa_micros, campaign_budget.amount_micros FROM campaign WHERE campaign.status != 'REMOVED'"):
+        c = r.campaign
+        print('BID|', c.name, c.status.name, c.advertising_channel_type.name, '|', c.bidding_strategy_type.name, '| tcpa', c.maximize_conversions.target_cpa_micros or c.target_cpa.target_cpa_micros, '| troas', c.maximize_conversion_value.target_roas, '| budget', r.campaign_budget.amount_micros // 1000000)
+    try:
+        for r in q("SELECT customer_conversion_goal.category, customer_conversion_goal.origin, customer_conversion_goal.biddable FROM customer_conversion_goal"):
+            print('GOAL|', r.customer_conversion_goal.category.name, r.customer_conversion_goal.origin.name, r.customer_conversion_goal.biddable)
+    except Exception as e: print('goal err', str(e)[:150])
+    for r in q("SELECT conversion_action.id, conversion_action.name, conversion_action.tag_snippets, conversion_action.value_settings.default_value, conversion_action.value_settings.always_use_default_value FROM conversion_action WHERE conversion_action.status = 'ENABLED'"):
+        ca = r.conversion_action
+        print('CA|', ca.id, ca.name, '| default value', ca.value_settings.default_value, ca.value_settings.always_use_default_value)
+        for t in ca.tag_snippets:
+            if t.type_.name == 'WEBPAGE' and t.page_format.name == 'HTML':
+                import re as _re; m = _re.search(r"'(AW-\d+/[A-Za-z0-9_-]+)'", t.event_snippet); print('   snippet|', m.group(1) if m else t.event_snippet[:120].replace(chr(10), ' '))
+    sys.exit(0)
 if MODE == 'callout_use':
     for lv, qq in (('campaign', "SELECT campaign.name, campaign.status, campaign_asset.status, asset.callout_asset.callout_text FROM campaign_asset WHERE asset.type = 'CALLOUT' AND campaign_asset.status != 'REMOVED'"),
                    ('adgroup', "SELECT campaign.name, ad_group.name, ad_group_asset.status, asset.callout_asset.callout_text FROM ad_group_asset WHERE asset.type = 'CALLOUT' AND ad_group_asset.status != 'REMOVED'"),
