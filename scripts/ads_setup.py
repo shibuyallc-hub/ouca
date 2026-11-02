@@ -1323,6 +1323,110 @@ if MODE in ('exact_pause_list', 'exact_pause'):
         print('AFTER:', dict(Counter((r.ad_group_criterion.keyword.match_type.name, r.ad_group_criterion.status.name) for r in chk)))
     sys.exit(0)
 
+if MODE == 'perf_diag':
+    # 読み取り専用：Google広告の成果が出ない原因の診断（検索語句・設定・デバイス・時間帯・IS・年齢性別・LP・CVアクション・広告強度）
+    D0, D1 = '2026-10-04', '2026-11-02'
+    def sec(title, fn):
+        print('\n#####', title)
+        try:
+            fn()
+        except Exception as e:
+            print('ERROR', str(e)[:400])
+    def c(r):
+        m = r.metrics
+        return f"imp={m.impressions} clk={m.clicks} cost={round(m.cost_micros/1e6)} conv={round(m.conversions,2)} allconv={round(m.all_conversions,2)}"
+    def s_campaign():
+        for r in q(f"""SELECT campaign.name, campaign.status, campaign.advertising_channel_type, campaign.bidding_strategy_type,
+            campaign.target_cpa.target_cpa_micros, campaign.maximize_conversions.target_cpa_micros, campaign.network_settings.target_google_search,
+            campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.geo_target_type_setting.positive_geo_target_type,
+            campaign_budget.amount_micros, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.all_conversions
+            FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '{D0}' AND '{D1}'"""):
+            cp = r.campaign
+            print('CAMP|', cp.name, cp.status.name, cp.advertising_channel_type.name, cp.bidding_strategy_type.name,
+                  'tCPA', round(cp.target_cpa.target_cpa_micros/1e6), round(cp.maximize_conversions.target_cpa_micros/1e6),
+                  'net(search/partner/display)', cp.network_settings.target_google_search, cp.network_settings.target_search_network, cp.network_settings.target_content_network,
+                  'geo', cp.geo_target_type_setting.positive_geo_target_type.name, 'budget', round(r.campaign_budget.amount_micros/1e6), c(r))
+    sec('キャンペーン設定', s_campaign)
+    def s_terms():
+        for r in q(f"""SELECT search_term_view.search_term, search_term_view.status, campaign.name, segments.keyword.info.text, segments.keyword.info.match_type,
+            metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.all_conversions FROM search_term_view
+            WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.impressions > 0 ORDER BY metrics.cost_micros DESC LIMIT 120"""):
+            print('TERM|', r.search_term_view.search_term, '|', r.search_term_view.status.name, '|', r.campaign.name, '|KW', r.segments.keyword.info.text, r.segments.keyword.info.match_type.name, '|', c(r))
+    sec('検索語句（費用順・30日）', s_terms)
+    def s_pmax_terms():
+        for cr in q("SELECT campaign.id, campaign.name FROM campaign WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' AND campaign.status != 'REMOVED'"):
+            cid = cr.campaign.id
+            print('PMAX-CAT|', cr.campaign.name)
+            try:
+                for r in q(f"""SELECT campaign_search_term_insight.category_label, metrics.impressions, metrics.clicks, metrics.conversions
+                    FROM campaign_search_term_insight WHERE campaign_search_term_insight.campaign_id = {cid} AND segments.date BETWEEN '{D0}' AND '{D1}'
+                    ORDER BY metrics.impressions DESC LIMIT 25"""):
+                    print('   CAT|', r.campaign_search_term_insight.category_label, 'imp', r.metrics.impressions, 'clk', r.metrics.clicks, 'conv', round(r.metrics.conversions, 2))
+            except Exception as e:
+                print('   ERROR', str(e)[:200])
+    sec('PMax 検索カテゴリ', s_pmax_terms)
+    def seg(label, field, extra=''):
+        def f():
+            for r in q(f"""SELECT campaign.name, {field}, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.all_conversions FROM campaign
+                WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.impressions > 0 {extra}"""):
+                v = getattr(r.segments, field.split('.')[1])
+                v = v.name if hasattr(v, 'name') else v
+                print(label, '|', r.campaign.name, '|', v, '|', c(r))
+        return f
+    sec('デバイス別', seg('DEV', 'segments.device'))
+    sec('曜日別', seg('DOW', 'segments.day_of_week'))
+    sec('時間帯別', seg('HOUR', 'segments.hour'))
+    def s_is():
+        for r in q(f"""SELECT campaign.name, metrics.search_impression_share, metrics.search_budget_lost_impression_share, metrics.search_rank_lost_impression_share,
+            metrics.search_top_impression_share, metrics.search_absolute_top_impression_share, metrics.impressions, metrics.clicks, metrics.cost_micros
+            FROM campaign WHERE campaign.advertising_channel_type = 'SEARCH' AND campaign.status != 'REMOVED' AND segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.impressions > 0"""):
+            m = r.metrics
+            print('IS|', r.campaign.name, 'IS', round(m.search_impression_share*100, 1), 'budgetLost', round(m.search_budget_lost_impression_share*100, 1),
+                  'rankLost', round(m.search_rank_lost_impression_share*100, 1), 'topIS', round(m.search_top_impression_share*100, 1), 'absTop', round(m.search_absolute_top_impression_share*100, 1))
+    sec('インプレッションシェア', s_is)
+    def s_age():
+        for r in q(f"""SELECT campaign.name, ad_group_criterion.age_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.all_conversions
+            FROM age_range_view WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.impressions > 0"""):
+            print('AGE|', r.campaign.name, '|', r.ad_group_criterion.age_range.type.name, '|', c(r))
+        for r in q(f"""SELECT campaign.name, ad_group_criterion.gender.type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.all_conversions
+            FROM gender_view WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.impressions > 0"""):
+            print('GENDER|', r.campaign.name, '|', r.ad_group_criterion.gender.type.name, '|', c(r))
+    sec('年齢・性別', s_age)
+    def s_lp():
+        for r in q(f"""SELECT landing_page_view.unexpanded_final_url, campaign.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.all_conversions
+            FROM landing_page_view WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.clicks > 0 ORDER BY metrics.cost_micros DESC LIMIT 30"""):
+            print('LP|', r.landing_page_view.unexpanded_final_url, '|', r.campaign.name, '|', c(r))
+        for r in q(f"""SELECT expanded_landing_page_view.expanded_final_url, campaign.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
+            FROM expanded_landing_page_view WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.clicks > 0 ORDER BY metrics.cost_micros DESC LIMIT 30"""):
+            print('ELP|', r.expanded_landing_page_view.expanded_final_url, '|', r.campaign.name, '|', c(r))
+    sec('着地ページ', s_lp)
+    def s_conv():
+        for r in q("SELECT conversion_action.name, conversion_action.type, conversion_action.status, conversion_action.primary_for_goal, conversion_action.category, conversion_action.counting_type, conversion_action.include_in_conversions_metric FROM conversion_action WHERE conversion_action.status != 'REMOVED'"):
+            a = r.conversion_action
+            print('CONV|', a.name, a.type.name, a.status.name, 'primary', a.primary_for_goal, a.category.name, a.counting_type.name, 'inMetric', a.include_in_conversions_metric)
+        for r in q(f"""SELECT segments.conversion_action_name, campaign.name, metrics.all_conversions, metrics.conversions FROM campaign
+            WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.all_conversions > 0"""):
+            print('CONVSEG|', r.campaign.name, '|', r.segments.conversion_action_name, '|all', round(r.metrics.all_conversions, 2), 'conv', round(r.metrics.conversions, 2))
+    sec('コンバージョン設定と実績', s_conv)
+    def s_ads():
+        for r in q(f"""SELECT campaign.name, ad_group.name, ad_group_ad.status, ad_group_ad.ad_strength, ad_group_ad.policy_summary.approval_status, ad_group_ad.ad.final_urls,
+            metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM ad_group_ad
+            WHERE ad_group_ad.status != 'REMOVED' AND segments.date BETWEEN '{D0}' AND '{D1}' AND campaign.advertising_channel_type = 'SEARCH'"""):
+            print('AD|', r.campaign.name, '|', r.ad_group.name, '|', r.ad_group_ad.status.name, '|strength', r.ad_group_ad.ad_strength.name, '|', r.ad_group_ad.policy_summary.approval_status.name, '|', list(r.ad_group_ad.ad.final_urls), '|', c(r))
+        for r in q(f"""SELECT campaign.name, asset_group.name, asset_group.status, asset_group.ad_strength, asset_group.final_urls, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
+            FROM asset_group WHERE asset_group.status != 'REMOVED' AND segments.date BETWEEN '{D0}' AND '{D1}'"""):
+            print('AG|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group.status.name, '|strength', r.asset_group.ad_strength.name, '|', list(r.asset_group.final_urls), '|', c(r))
+    sec('広告・アセットグループ', s_ads)
+    def s_qs():
+        for r in q(f"""SELECT campaign.name, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.quality_info.quality_score,
+            ad_group_criterion.quality_info.creative_quality_score, ad_group_criterion.quality_info.post_click_quality_score, ad_group_criterion.quality_info.search_predicted_ctr,
+            metrics.impressions, metrics.clicks, metrics.cost_micros FROM keyword_view WHERE segments.date BETWEEN '{D0}' AND '{D1}' AND metrics.impressions > 0
+            ORDER BY metrics.cost_micros DESC LIMIT 40"""):
+            qi = r.ad_group_criterion.quality_info
+            print('QS|', r.campaign.name, '|', r.ad_group_criterion.keyword.text, r.ad_group_criterion.keyword.match_type.name, '|QS', qi.quality_score, '|ad', qi.creative_quality_score.name, '|LP', qi.post_click_quality_score.name, '|pCTR', qi.search_predicted_ctr.name, '|', c(r))
+    sec('品質スコア', s_qs)
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
