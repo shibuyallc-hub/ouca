@@ -1532,7 +1532,7 @@ if MODE == 'sl_fix':
     EXACT = {'初回15%OFF・送料無料': '初回60%OFF・送料無料', '¥19,980／30日分': '¥4,320（通常¥10,800）', '1日1〜3粒。まずは1ヶ月から': '1日1〜3粒。まずは1袋から', '初回15%OFF': '初回60%OFF'}
     def mp2(t):
         if t in EXACT: return EXACT[t]
-        return t.replace('初回15%OFF', '初回60%OFF').replace('19,980円', '10,800円').replace('2粒に222mg', '1粒に111mg')
+        return t.replace('初回15%OFF', '初回60%OFF').replace('19,980円', '10,800円').replace('2粒に222mg', '1粒に111mg').replace('まず1ヶ月', 'まず1袋').replace('まずは1ヶ月', 'まずは1袋')
     new_assets = {}
     def new_asset(r, a, b, c_):
         key = (r.asset.id, a, b, c_)
@@ -1569,13 +1569,14 @@ if MODE == 'sl_fix':
             for e in ex.failure.errors[:3]: print('  FAILED -', e.message)
     print('== 確認（残っている旧文言）==')
     left = 0
-    for r in q("SELECT campaign.name, ad_group.name, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM ad_group_asset WHERE ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM ad_group_asset WHERE ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
         sa = r.asset.sitelink_asset
         print('AFTER-AG|', r.campaign.name, '|', r.ad_group.name, '|', sa.link_text, '|', sa.description1, '|', sa.description2)
-        if '15%' in sa.link_text + sa.description1 + sa.description2: left += 1
-    for r in q("SELECT campaign.name, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        if '15%' in sa.link_text + sa.description1 + sa.description2 or '1ヶ月' in sa.link_text + sa.description1 + sa.description2: left += 1
+    for r in q("SELECT campaign.name, campaign.status, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
         sa = r.asset.sitelink_asset
-        if '15%' in sa.link_text + sa.description1 + sa.description2: left += 1; print('LEFT|', r.campaign.name, sa.link_text)
+        print('AFTER-C|', r.campaign.name, r.campaign.status.name, '|', sa.link_text, '|', sa.description1, '|', sa.description2)
+        if '15%' in sa.link_text + sa.description1 + sa.description2 or '1ヶ月' in sa.link_text + sa.description1 + sa.description2: left += 1; print('LEFT|', r.campaign.name, sa.link_text)
     print('RESULT| 旧文言の残り:', left)
     sys.exit(0)
 
