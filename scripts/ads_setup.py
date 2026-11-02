@@ -1515,6 +1515,16 @@ if MODE in ('pmax_url_off', 'age65_url'):
         print('SLC|', r.campaign.name, '|', r.campaign_asset.field_type.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
     sys.exit(0)
 
+if MODE == 'sl_scan':
+    # 読み取り専用：全キャンペーンのサイトリンク等の飛び先URL
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group_asset.field_type, ad_group_asset.status, asset.sitelink_asset.link_text, asset.final_urls FROM ad_group_asset WHERE ad_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        print('SLAG|', r.campaign.name, '|', r.campaign.status.name, '|', r.ad_group.name, '|', r.ad_group_asset.field_type.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    for r in q("SELECT campaign.name, campaign.status, campaign_asset.field_type, campaign_asset.status, asset.sitelink_asset.link_text, asset.final_urls FROM campaign_asset WHERE campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        print('SLC|', r.campaign.name, '|', r.campaign.status.name, '|', r.campaign_asset.field_type.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    for r in q("SELECT campaign.name, campaign.status, asset_group.name, asset_group_asset.field_type, asset.sitelink_asset.link_text, asset.final_urls FROM asset_group_asset WHERE asset_group_asset.status != 'REMOVED' AND asset_group_asset.field_type = 'SITELINK' AND campaign.status != 'REMOVED'"):
+        print('SLAGA|', r.campaign.name, '|', r.campaign.status.name, '|', r.asset_group.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
