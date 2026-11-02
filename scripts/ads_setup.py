@@ -1580,6 +1580,35 @@ if MODE == 'sl_fix':
     print('RESULT| 旧文言の残り:', left)
     sys.exit(0)
 
+if MODE == 'worry_kw':
+    # 検索キャンペーンの既存LP1広告グループに、「腸のお悩み系」キーワードをフレーズ一致で追加（広告文は変えない）
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    KWS = ['下痢 サプリ', '軟便 サプリ', 'お腹 ゆるい サプリ', 'お腹が緩い サプリ',
+           'お腹 張る サプリ', '膨満感 サプリ', 'おなら サプリ', 'ガス 多い サプリ',
+           '便秘解消 サプリ', '便秘 改善 サプリ', '便が出ない サプリ', 'お通じ サプリ', '便通 整える サプリ',
+           '腸が弱い サプリ', '腸の不調 サプリ', 'お腹が弱い サプリ', 'お腹 敏感 サプリ',
+           'お腹 悩み サプリ', '腸 悩み サプリ', 'お腹 悩み', '腸 悩み']
+    base = list(q("SELECT ad_group.resource_name FROM ad_group WHERE campaign.name = 'OUCA_supplement_search' AND ad_group.name = 'OUCA_supplement_ag_LP1' AND ad_group.status != 'REMOVED'"))[0]
+    agrn = base.ad_group.resource_name
+    have = {r.ad_group_criterion.keyword.text.lower() for r in q(f"SELECT ad_group_criterion.keyword.text FROM ad_group_criterion WHERE ad_group.resource_name = '{agrn}' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.status != 'REMOVED' AND ad_group_criterion.negative = FALSE")}
+    print('existing keywords in group:', len(have))
+    kops = []
+    for t in KWS:
+        if t.lower() in have: print('skip(existing):', t); continue
+        op = client.get_type('AdGroupCriterionOperation'); k = op.create; k.ad_group = agrn; k.status = E.AdGroupCriterionStatusEnum.ENABLED
+        k.keyword.text = t; k.keyword.match_type = E.KeywordMatchTypeEnum.PHRASE; kops.append(op)
+    if kops:
+        try:
+            client.get_service('AdGroupCriterionService').mutate_ad_group_criteria(customer_id=CID, operations=kops); print('keywords added:', len(kops))
+        except GoogleAdsException as ex_:
+            for e in ex_.failure.errors[:8]: print('FAILED -', e.message)
+    print('--- verify ---')
+    for r in q(f"SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status, ad_group_criterion.approval_status FROM ad_group_criterion WHERE ad_group.resource_name = '{agrn}' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.status != 'REMOVED' AND ad_group_criterion.negative = FALSE"):
+        if r.ad_group_criterion.keyword.text in KWS:
+            print('KW|', r.ad_group_criterion.keyword.text, r.ad_group_criterion.keyword.match_type.name, r.ad_group_criterion.status.name, r.ad_group_criterion.approval_status.name)
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
