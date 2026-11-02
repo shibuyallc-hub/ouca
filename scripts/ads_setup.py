@@ -1466,6 +1466,26 @@ if MODE == 'pmax_url_src':
     sec('アセットグループの最終URL', a_ag_urls)
     sys.exit(0)
 
+if MODE == 'age65_excl':
+    # 全キャンペーン（停止中含む）に「65歳以上」をキャンペーン単位で除外。既存の設定は触らない。
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    camps = [(r.campaign.id, r.campaign.name, r.campaign.status.name, r.campaign.advertising_channel_type.name) for r in q("SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type FROM campaign WHERE campaign.status != 'REMOVED'")]
+    def have(cid_):
+        return {r.campaign_criterion.age_range.type_.name: r.campaign_criterion.negative for r in q(f"SELECT campaign_criterion.age_range.type, campaign_criterion.negative FROM campaign_criterion WHERE campaign.id = {cid_} AND campaign_criterion.type = 'AGE_RANGE'")}
+    for cid_, cname, cst, ctype in camps:
+        h = have(cid_); print(f'{cname} [{cst}/{ctype}] before:', h)
+        if h.get('AGE_RANGE_65_UP') is True:
+            print('  already excluded 65+'); continue
+        op = client.get_type("CampaignCriterionOperation"); c = op.create
+        c.campaign = f"customers/{CID}/campaigns/{cid_}"; c.negative = True; c.age_range.type_ = E.AgeRangeTypeEnum.AGE_RANGE_65_UP
+        try:
+            client.get_service("CampaignCriterionService").mutate_campaign_criteria(customer_id=CID, operations=[op]); print('  OK excluded AGE_RANGE_65_UP')
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED -', e.message)
+        print('  after:', have(cid_))
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
