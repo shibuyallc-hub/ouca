@@ -1427,6 +1427,24 @@ if MODE == 'perf_diag':
     sec('品質スコア', s_qs)
     sys.exit(0)
 
+if MODE == 'pmax_url_fix':
+    # P-Max LP1 の「最終ページURLの拡張」をオフにする（/shop/ などLP以外に飛ばさない）。対象は指定の1キャンペーンのみ。
+    from google.api_core import protobuf_helpers
+    TARGET = 'ouca_supplement_pmax_LP1'
+    def state():
+        return q("SELECT campaign.resource_name, campaign.name, campaign.status, campaign.url_expansion_opt_out FROM campaign "
+                 "WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' AND campaign.status != 'REMOVED'")
+    for r in state():
+        print('BEFORE|', r.campaign.name, r.campaign.status.name, 'url_expansion_opt_out=', r.campaign.url_expansion_opt_out)
+    todo = [r for r in state() if r.campaign.name == TARGET and not r.campaign.url_expansion_opt_out]
+    for r in todo:
+        op = client.get_type('CampaignOperation'); u = op.update; u.resource_name = r.campaign.resource_name; u.url_expansion_opt_out = True
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        client.get_service('CampaignService').mutate_campaigns(customer_id=CID, operations=[op]); print('OK set url_expansion_opt_out=True for', r.campaign.name)
+    for r in state():
+        print('AFTER|', r.campaign.name, r.campaign.status.name, 'url_expansion_opt_out=', r.campaign.url_expansion_opt_out)
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
