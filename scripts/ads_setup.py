@@ -1525,6 +1525,60 @@ if MODE == 'sl_scan':
         print('SLAGA|', r.campaign.name, '|', r.campaign.status.name, '|', r.asset_group.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
     sys.exit(0)
 
+if MODE == 'sl_fix':
+    # サイトリンクの旧文言（初回15%OFF等）を新アセットに差し替え。広告グループ単位・キャンペーン単位の両方、停止中も含む
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    EXACT = {'初回15%OFF・送料無料': '初回60%OFF・送料無料', '¥19,980／30日分': '¥4,320（通常¥10,800）', '1日1〜3粒。まずは1ヶ月から': '1日1〜3粒。まずは1袋から', '初回15%OFF': '初回60%OFF'}
+    def mp2(t):
+        if t in EXACT: return EXACT[t]
+        return t.replace('初回15%OFF', '初回60%OFF').replace('19,980円', '10,800円').replace('2粒に222mg', '1粒に111mg')
+    new_assets = {}
+    def new_asset(r, a, b, c_):
+        key = (r.asset.id, a, b, c_)
+        if key not in new_assets:
+            op = client.get_type("AssetOperation"); x = op.create; x.sitelink_asset.link_text = a; x.sitelink_asset.description1 = b; x.sitelink_asset.description2 = c_
+            x.final_urls.extend(list(r.asset.final_urls)); x.final_mobile_urls.extend(list(r.asset.final_mobile_urls))
+            new_assets[key] = client.get_service("AssetService").mutate_assets(customer_id=CID, operations=[op]).results[0].resource_name
+        return new_assets[key]
+    print('== 広告グループ単位 ==')
+    for r in q("SELECT campaign.name, campaign.status, ad_group.name, ad_group.resource_name, ad_group_asset.resource_name, asset.id, asset.final_urls, asset.final_mobile_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM ad_group_asset WHERE ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        sa = r.asset.sitelink_asset; a, b, c_ = mp2(sa.link_text), mp2(sa.description1), mp2(sa.description2)
+        if (a, b, c_) == (sa.link_text, sa.description1, sa.description2): continue
+        print('AGSL|', r.campaign.name, r.campaign.status.name, '|', r.ad_group.name, '|', [sa.link_text, sa.description1, sa.description2], '=>', [a, b, c_])
+        try:
+            rn = new_asset(r, a, b, c_)
+            ops = []
+            o1 = client.get_type("AdGroupAssetOperation"); o1.create.ad_group = r.ad_group.resource_name; o1.create.asset = rn; o1.create.field_type = E.AssetFieldTypeEnum.SITELINK; ops.append(o1)
+            o2 = client.get_type("AdGroupAssetOperation"); o2.remove = r.ad_group_asset.resource_name; ops.append(o2)
+            client.get_service("AdGroupAssetService").mutate_ad_group_assets(customer_id=CID, operations=ops); print('  OK')
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED -', e.message)
+    print('== キャンペーン単位 ==')
+    for r in q("SELECT campaign.name, campaign.status, campaign.resource_name, campaign_asset.resource_name, asset.id, asset.final_urls, asset.final_mobile_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        sa = r.asset.sitelink_asset; a, b, c_ = mp2(sa.link_text), mp2(sa.description1), mp2(sa.description2)
+        if (a, b, c_) == (sa.link_text, sa.description1, sa.description2): continue
+        print('CSL|', r.campaign.name, r.campaign.status.name, '|', [sa.link_text, sa.description1, sa.description2], '=>', [a, b, c_])
+        try:
+            rn = new_asset(r, a, b, c_)
+            ops = []
+            o1 = client.get_type("CampaignAssetOperation"); o1.create.campaign = r.campaign.resource_name; o1.create.asset = rn; o1.create.field_type = E.AssetFieldTypeEnum.SITELINK; ops.append(o1)
+            o2 = client.get_type("CampaignAssetOperation"); o2.remove = r.campaign_asset.resource_name; ops.append(o2)
+            client.get_service("CampaignAssetService").mutate_campaign_assets(customer_id=CID, operations=ops); print('  OK')
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('  FAILED -', e.message)
+    print('== 確認（残っている旧文言）==')
+    left = 0
+    for r in q("SELECT campaign.name, ad_group.name, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM ad_group_asset WHERE ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        sa = r.asset.sitelink_asset
+        print('AFTER-AG|', r.campaign.name, '|', r.ad_group.name, '|', sa.link_text, '|', sa.description1, '|', sa.description2)
+        if '15%' in sa.link_text + sa.description1 + sa.description2: left += 1
+    for r in q("SELECT campaign.name, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2 FROM campaign_asset WHERE campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        sa = r.asset.sitelink_asset
+        if '15%' in sa.link_text + sa.description1 + sa.description2: left += 1; print('LEFT|', r.campaign.name, sa.link_text)
+    print('RESULT| 旧文言の残り:', left)
+    sys.exit(0)
+
 if MODE == 'rebuild_search':
     import ads_build
     ads_build.run(client, CID, 'cleanup_search')
