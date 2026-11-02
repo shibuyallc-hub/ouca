@@ -1427,22 +1427,43 @@ if MODE == 'perf_diag':
     sec('品質スコア', s_qs)
     sys.exit(0)
 
-if MODE == 'pmax_url_fix':
-    # P-Max LP1 の「最終ページURLの拡張」をオフにする（/shop/ などLP以外に飛ばさない）。対象は指定の1キャンペーンのみ。
-    from google.api_core import protobuf_helpers
-    TARGET = 'ouca_supplement_pmax_LP1'
-    def state():
-        return q("SELECT campaign.resource_name, campaign.name, campaign.status, campaign.url_expansion_opt_out FROM campaign "
-                 "WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' AND campaign.status != 'REMOVED'")
-    for r in state():
-        print('BEFORE|', r.campaign.name, r.campaign.status.name, 'url_expansion_opt_out=', r.campaign.url_expansion_opt_out)
-    todo = [r for r in state() if r.campaign.name == TARGET and not r.campaign.url_expansion_opt_out]
-    for r in todo:
-        op = client.get_type('CampaignOperation'); u = op.update; u.resource_name = r.campaign.resource_name; u.url_expansion_opt_out = True
-        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
-        client.get_service('CampaignService').mutate_campaigns(customer_id=CID, operations=[op]); print('OK set url_expansion_opt_out=True for', r.campaign.name)
-    for r in state():
-        print('AFTER|', r.campaign.name, r.campaign.status.name, 'url_expansion_opt_out=', r.campaign.url_expansion_opt_out)
+if MODE == 'pmax_url_src':
+    # 読み取り専用：P-Max が /shop/ 系URLに飛ばしている元（アセットのリンク・URL拡張）を調べる
+    def sec(title, fn):
+        print('\n#####', title)
+        try:
+            fn()
+        except Exception as e:
+            print('ERROR', str(e)[:400])
+    def a_campaign():
+        for r in q("""SELECT campaign.name, campaign_asset.field_type, campaign_asset.status, asset.id, asset.type, asset.final_urls, asset.sitelink_asset.link_text,
+            asset.promotion_asset.promotion_target, asset.callout_asset.callout_text FROM campaign_asset
+            WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' AND campaign_asset.status != 'REMOVED'"""):
+            print('CA|', r.campaign.name, '|', r.campaign_asset.field_type.name, '|', r.campaign_asset.status.name, '|', r.asset.id, r.asset.type_.name if hasattr(r.asset, 'type_') else '', '|', r.asset.sitelink_asset.link_text or r.asset.callout_asset.callout_text, '|', list(r.asset.final_urls))
+    sec('P-Max キャンペーン単位のアセット', a_campaign)
+    def a_ag():
+        for r in q("""SELECT campaign.name, asset_group.name, asset_group_asset.field_type, asset_group_asset.status, asset.id, asset.final_urls, asset.sitelink_asset.link_text
+            FROM asset_group_asset WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' AND asset_group_asset.status != 'REMOVED'
+            AND asset_group_asset.field_type IN ('SITELINK','CALL_TO_ACTION_SELECTION','PROMOTION','BUSINESS_NAME','LANDING_PAGE_PREVIEW')"""):
+            print('AGA|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group_asset.field_type.name, '|', r.asset_group_asset.status.name, '|', r.asset.id, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    sec('P-Max アセットグループのサイトリンク等', a_ag)
+    def a_cust():
+        for r in q("""SELECT customer_asset.field_type, customer_asset.status, asset.id, asset.final_urls, asset.sitelink_asset.link_text FROM customer_asset WHERE customer_asset.status != 'REMOVED'"""):
+            print('CUA|', r.customer_asset.field_type.name, '|', r.customer_asset.status.name, '|', r.asset.id, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    sec('アカウント単位のアセット', a_cust)
+    def a_exp():
+        for r in q("""SELECT campaign.name, final_url_expansion_asset_view.final_url, final_url_expansion_asset_view.field_type, metrics.impressions, metrics.clicks, metrics.cost_micros
+            FROM final_url_expansion_asset_view WHERE segments.date BETWEEN '2026-10-04' AND '2026-11-02' AND metrics.impressions > 0 ORDER BY metrics.impressions DESC LIMIT 30"""):
+            print('FUE|', r.campaign.name, '|', r.final_url_expansion_asset_view.final_url, '|', r.final_url_expansion_asset_view.field_type.name, '| imp', r.metrics.impressions, 'clk', r.metrics.clicks)
+    sec('URL拡張で使われたURL', a_exp)
+    def a_set():
+        for r in q("SELECT campaign.name, campaign.asset_automation_settings FROM campaign WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX' AND campaign.status != 'REMOVED'"):
+            print('AUTO|', r.campaign.name, [(x.asset_automation_type.name, x.asset_automation_status.name) for x in r.campaign.asset_automation_settings])
+    sec('アセット自動化の設定', a_set)
+    def a_ag_urls():
+        for r in q("SELECT campaign.name, asset_group.name, asset_group.status, asset_group.final_urls, asset_group.final_mobile_urls FROM asset_group WHERE asset_group.status != 'REMOVED'"):
+            print('AGU|', r.campaign.name, '|', r.asset_group.name, '|', r.asset_group.status.name, '|', list(r.asset_group.final_urls), list(r.asset_group.final_mobile_urls))
+    sec('アセットグループの最終URL', a_ag_urls)
     sys.exit(0)
 
 if MODE == 'rebuild_search':
