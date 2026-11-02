@@ -1466,7 +1466,7 @@ if MODE == 'pmax_url_src':
     sec('アセットグループの最終URL', a_ag_urls)
     sys.exit(0)
 
-if MODE == 'age65_excl':
+if MODE in ('age65_excl', 'age65_url'):
     # 全キャンペーン（停止中含む）に「65歳以上」をキャンペーン単位で除外。既存の設定は触らない。
     from google.ads.googleads.errors import GoogleAdsException
     E = client.enums
@@ -1484,6 +1484,35 @@ if MODE == 'age65_excl':
         except GoogleAdsException as ex:
             for e in ex.failure.errors[:3]: print('  FAILED -', e.message)
         print('  after:', have(cid_))
+    if MODE == 'age65_excl': sys.exit(0)
+
+if MODE in ('pmax_url_off', 'age65_url'):
+    # P-Max LP1 の「最終URL拡張」系の自動化をオフに（LP2・新P-Maxと同じ状態に揃える）。他の設定は現状維持。
+    from google.api_core import protobuf_helpers
+    from google.ads.googleads.errors import GoogleAdsException
+    E = client.enums
+    TARGET = 'ouca_supplement_pmax_LP1'
+    for r in q(f"SELECT campaign.resource_name, campaign.name, campaign.asset_automation_settings FROM campaign WHERE campaign.name = '{TARGET}' AND campaign.status != 'REMOVED'"):
+        cur = [(x.asset_automation_type, x.asset_automation_status) for x in r.campaign.asset_automation_settings]
+        print('URLOFF before:', [(t.name, st.name) for t, st in cur])
+        op = client.get_type('CampaignOperation'); u = op.update; u.resource_name = r.campaign.resource_name
+        for t, st in cur:
+            ns = E.AssetAutomationStatusEnum.OPTED_OUT if t == E.AssetAutomationTypeEnum.FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION else st
+            it = client.get_type('Campaign').AssetAutomationSetting(); it.asset_automation_type = t; it.asset_automation_status = ns
+            u.asset_automation_settings.append(it)
+        client.copy_from(op.update_mask, protobuf_helpers.field_mask(None, u._pb))
+        try:
+            client.get_service('CampaignService').mutate_campaigns(customer_id=CID, operations=[op]); print('URLOFF OK')
+        except GoogleAdsException as ex:
+            for e in ex.failure.errors[:3]: print('URLOFF FAILED -', e.message)
+    for r in q(f"SELECT campaign.name, campaign.asset_automation_settings FROM campaign WHERE campaign.name = '{TARGET}'"):
+        print('URLOFF after:', [(x.asset_automation_type.name, x.asset_automation_status.name) for x in r.campaign.asset_automation_settings])
+    # 参考（読み取り）：検索キャンペーンのサイトリンク等の飛び先
+    print('--- sitelink/asset final URLs (read-only) ---')
+    for r in q("SELECT campaign.name, ad_group.name, ad_group_asset.field_type, ad_group_asset.status, asset.sitelink_asset.link_text, asset.final_urls FROM ad_group_asset WHERE ad_group_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        print('SLAG|', r.campaign.name, '|', r.ad_group.name, '|', r.ad_group_asset.field_type.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
+    for r in q("SELECT campaign.name, campaign_asset.field_type, campaign_asset.status, asset.sitelink_asset.link_text, asset.final_urls FROM campaign_asset WHERE campaign_asset.status != 'REMOVED' AND campaign.status != 'REMOVED'"):
+        print('SLC|', r.campaign.name, '|', r.campaign_asset.field_type.name, '|', r.asset.sitelink_asset.link_text, '|', list(r.asset.final_urls))
     sys.exit(0)
 
 if MODE == 'rebuild_search':
