@@ -14,6 +14,10 @@ Interactive multi-channel ROI dashboard for Google Ads and Meta Ads performance 
 
 - **Dashboard:** https://shibuyallc-hub.github.io/ouca/
 
+## Docs
+
+- **仕組み説明書（日本語）**: [docs/DASHBOARD.md](docs/DASHBOARD.md) — データの流れ、スプレッドシートのタブ、自動更新、週次レポート、広告運用用ワークフロー、トラブル対応
+
 ## Files
 
 - `index.html` - Main dashboard (root access)
