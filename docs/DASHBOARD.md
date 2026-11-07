@@ -70,6 +70,71 @@ OUCA supplement（ouca.today / EC-Force）の広告成果を、Google 広告・M
 > **注意**: GA4 の流入チャネルの割り当ては、集計後に、1日ほどかけて変わることがあります。購入の日と、割り当てがずれて見えるときは、翌日に、もう一度見てください。
 > **注意**: 動作確認のためのテスト注文も、GA4 の `purchase` に入ります。除外する仕組みは、ありません。
 
+### 3.3 API の接続方法（認証の仕組みと再設定の目安）
+
+> **お断り**: 初期設定のときの操作記録は、リポジトリに残っていません。以下は、**コード（`scripts/` 内の認証部分）の内容**と、各サービスの**一般的な設定手順**にもとづく記述です。トークンの期限切れなどで、つなぎ直すときの目安として使ってください。
+
+#### 全体像
+
+| つなぐ先 | 認証の方式 | 使う Secret | コード上の接続 |
+|---|---|---|---|
+| Google スプレッドシート | サービスアカウント（JSON） | `SERVICE_ACCOUNT_JSON` | `google.oauth2.service_account` ＋ `gspread`（権限: `spreadsheets`） |
+| GA4 Data API | 同じサービスアカウント | `SERVICE_ACCOUNT_JSON` | `BetaAnalyticsDataClient`（権限: `analytics.readonly`）、プロパティID `544878501` |
+| Google 広告 API | OAuth 2.0（ユーザー認証）＋ 開発者トークン | `GOOGLE_ADS_*` の5つ | `google-ads` ライブラリ（`GoogleAdsClient.load_from_dict`）、検索言語は GAQL |
+| Meta Marketing API | アクセストークン（システムユーザー） | `META_ACCESS_TOKEN`、`META_AD_ACCOUNT_ID` | Graph API v21.0 の `act_<広告アカウントID>/insights` を `requests` で呼ぶ |
+| EC-Force（受注） | API 連携は**ありません** | — | 購入は GTM → GA4 の `purchase` イベントで取る。実際の注文との突き合わせは、管理画面で手動 |
+
+#### ① Google スプレッドシート ＋ GA4（サービスアカウント）
+
+1. Google Cloud で、プロジェクトを選び、**サービスアカウントを作成**して、JSON キーを発行する。
+2. 同じプロジェクトで、次の API を有効にする: **Google Sheets API**、**Google Analytics Data API**。
+3. JSON の中身を全文、GitHub の Secret `SERVICE_ACCOUNT_JSON` に登録する。
+4. サービスアカウントのメールアドレス（JSON の `client_email`）を、次の2か所に追加する。
+   - スプレッドシート `OUCA ROI Dashboard`: 共有 → **編集者**
+   - GA4 のプロパティ `544878501`: 管理 → プロパティのアクセス管理 → **閲覧者**以上
+5. ワークフローは、この1つの JSON から、GA4 用（`analytics.readonly`）とシート用（`spreadsheets`）の2つの資格情報を作ります（`auto_update_dashboard.py` の冒頭）。
+
+#### ② Google 広告 API
+
+必要なものは、次の5つです（すべて GitHub の Secret に登録）。
+
+| Secret | 取得場所 |
+|---|---|
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | 管理者アカウント（MCC）の「API センター」で発行（承認が必要） |
+| `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET` | Google Cloud の「認証情報」で、OAuth クライアントIDを作成 |
+| `GOOGLE_ADS_REFRESH_TOKEN` | 広告アカウントの権限を持つ Google アカウントで、OAuth の同意を1回行って発行（`google-ads` ライブラリ付属の認証サンプルが使える） |
+| `GOOGLE_ADS_CUSTOMER_ID` | 広告アカウントのID（ハイフンなしの10桁） |
+
+- コードでは、`GOOGLE_ADS_CUSTOMER_ID` を、**`login_customer_id`（ログイン先）と、問い合わせ先の両方**に使っています。
+- **リフレッシュトークンは、人のGoogleアカウントに紐づきます。** そのアカウントのパスワード変更、権限の取り消し、長期間の未使用などで、無効になることがあります（症状は 8章・9章の表を参照）。
+- 同じ資格情報で、**広告の変更（除外キーワードの登録、文言の差し替えなど）もできます**（`ads-setup` ブランチ）。取り扱いには、注意してください。
+
+#### ③ Meta（Facebook・Instagram）広告
+
+1. Meta ビジネス設定で、**システムユーザー**（現在は「OUCA」）を使う。広告アカウント「OUCA広告」に、権限を割り当てる。
+2. アプリ（現在は「OUCA ROI Dashboard」）を使い、システムユーザーの**アクセストークンを発行**する。
+3. Secret に登録する:
+   - `META_ACCESS_TOKEN`: 発行したトークン
+   - `META_AD_ACCOUNT_ID`: 広告アカウントのID（**数字だけ**。コードが `act_` を付けます）
+4. **現在のトークンの権限は `ads_read`（閲覧）のみです。** そのため、ダッシュボードの数字の取得はできますが、**広告の作成・文言の変更は、API からはできません**（広告マネージャで手動）。変更したい場合は、`ads_management` の権限つきで、トークンを発行し直す必要があります。
+5. トークンに有効期限があるときは、期限切れで取得が止まります。`Meta API HTTP 401` などが、Actions のログに出ます。
+
+#### ④ 計測（GTM・GA4）側の設定
+
+ダッシュボードの数字は、サイト側の計測が前提です。
+
+- Google タグマネージャ（コンテナ `OUCA_EC` / `GTM-N5JBTZ3Z`）に、GA4 の設定タグ、`purchase`・`begin_checkout` のイベント、Google 広告・Meta ピクセルの購入タグがあります。
+- LP の判定には、GTM の `content_group` 変数（`LP: lp-xxx` ／「ショップ」）を使います（5章）。
+- Amazon ボタンのクリックは、イベント `amazon_click` で取ります（`Amazonクリック` タブ）。
+
+#### 接続の確認方法
+
+1. GitHub の Actions で `Auto Update Dashboard` を手動実行する（3章のコマンド）。
+2. ログの次の行を見る。
+   - `✓ ... GA4 records found` → GA4 に接続できている。`✗ GA4 Error` → サービスアカウントの権限（①の4）を確認
+   - Google 広告・Meta のセクションで、エラー本文が出ていないか（`Meta API HTTP 4xx` → トークン、`GoogleAdsException` → ②の5つの値）
+3. スプレッドシートの `Live Data` の「Last Updated」が、直近の時刻になっていれば、全体が通っています。
+
 ## 4. スプレッドシートのタブ一覧
 
 | タブ名 | 中身 | 主な利用先 |
@@ -173,3 +238,4 @@ OUCA supplement（ouca.today / EC-Force）の広告成果を、Google 広告・M
 ## 10. 更新履歴
 
 - 2026-11-07: 初版（仕組み・タブ・ワークフロー・運用上の注意）
+- 2026-11-07: 3.3「API の接続方法」を追加（認証の方式・必要な Secret・再設定の目安）
