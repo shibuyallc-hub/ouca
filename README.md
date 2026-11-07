@@ -1,31 +1,36 @@
-# OUCA ROI Dashboard
+# OUCA 広告効果ダッシュボード
 
-Interactive multi-channel ROI dashboard for Google Ads and Meta Ads performance analysis.
+Google 広告・Meta 広告・GA4 の数字を、1枚の画面で確認するための広告効果ダッシュボードです。
 
-## Features
+## 主な機能
 
-- 📊 Interactive dashboard with date filters
-- 🛍️ Product-level analysis
-- 📈 Daily/Weekly/Monthly performance views
-- 💱 All metrics in JPY (Japanese Yen)
-- 📱 Responsive design
+- 📊 広告効果: 日別・媒体別（Google／Meta）の広告費・クリック・CV・CPA・ROAS
+- 🌐 流入・PV: チャネル別のセッション・直帰率・滞在時間
+- 🛍️ 商品別: 商品ごとの購入数・売上
+- 🧭 LP別: LP ごとの訪問・直帰率・広告費
+- 🔎 詳細分析: キーワード・年齢・性別・地域・イベントの内訳
+- 📅 週次レポート: 先週との比較と、良い点・悪い点の自動判定
+- 💱 金額はすべて日本円（JPY）
+- 🔄 3時間ごとに自動で更新
+- 📱 スマートフォンにも対応
 
-## Access
+## アクセス
 
-- **Dashboard:** https://shibuyallc-hub.github.io/ouca/
+- **ダッシュボード:** https://shibuyallc-hub.github.io/ouca/
 
-## Docs
+## ドキュメント
 
-- **仕組み説明書（日本語）**: [docs/DASHBOARD.md](docs/DASHBOARD.md) — データの流れ、スプレッドシートのタブ、自動更新、週次レポート、広告運用用ワークフロー、トラブル対応
+- **仕組み説明書:** [docs/DASHBOARD.md](docs/DASHBOARD.md) — データの流れ、スプレッドシートのタブ、自動更新、週次レポート、広告運用用ワークフロー、トラブル対応
 
-## Files
+## ファイル
 
-- `index.html` - Main dashboard (root access)
-- `docs/index.html` - GitHub Pages version
+- `docs/index.html` - 本番の画面（GitHub Pages で配信）
+- `index.html` - 初期版の簡易画面
+- `scripts/` - データ取得・週次レポート・除外キーワード登録のスクリプト
+- `.github/workflows/` - 自動実行の設定（ダッシュボード更新・週次レポート・除外キーワード登録）
 
-## Usage
+## 使い方
 
-1. Visit the URL above
-2. Select date range and platform filters
-3. Click "Update Dashboard" to load data
-4. View product analysis in the "Product Analysis" tab
+1. 上のURLを開く
+2. 右上の期間（今日・昨日・過去7日間・過去30日間など）を選ぶ
+3. 上部のタブ（広告効果／サマリー／流入・PV／商品別／LP別／詳細分析／週次レポート）で、見たい内容に切り替える
