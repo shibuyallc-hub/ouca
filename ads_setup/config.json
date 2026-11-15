@@ -541,7 +541,11 @@
     "BRAVION",
     "ブラビオン",
     "ぶらびおん",
-    "カプシEX"
+    "カプシEX",
+    "闘王",
+    "とうおう",
+    "ファイターキング",
+    "fighter king"
   ],
   "META": {
     "LP1": {
@@ -707,7 +711,11 @@
     "子ども発達障害対応スペシャリスト",
     "JADP japanese ability development promotion association",
     "日本能力開発推進協会",
-    "JADP"
+    "JADP",
+    "闘王",
+    "とうおう",
+    "ファイターキング",
+    "fighter king"
   ],
   "NEG_BROAD": [
     "オイシックス",
@@ -852,6 +860,10 @@
     "子ども発達障害対応スペシャリスト",
     "JADP japanese ability development promotion association",
     "日本能力開発推進協会",
-    "JADP"
+    "JADP",
+    "闘王",
+    "とうおう",
+    "ファイターキング",
+    "fighter king"
   ]
 }
