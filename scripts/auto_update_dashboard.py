@@ -25,11 +25,15 @@ PURCHASE_ONLY_FILTER = FilterExpression(
     )
 )
 
+# Googleの流入区分。検索広告は「Paid Search」、P-Max（ほかDemand Gen）は GA4 では「Cross-network」に分類される。
+# 以前は Paid Search だけを Google としていたため、P-Maxの購入がダッシュボードに入らなかった（2026-11-11の購入）。
+GOOGLE_CHANNELS = ('Paid Search', 'Cross-network')
+
 # Ad-driven traffic only (used by the 詳細分析 breakdowns: age/gender, region, events).
 ADS_CHANNEL_FILTER = FilterExpression(
     filter=Filter(
         field_name="sessionDefaultChannelGroup",
-        in_list_filter=Filter.InListFilter(values=["Paid Search", "Paid Social"]),
+        in_list_filter=Filter.InListFilter(values=["Paid Search", "Cross-network", "Paid Social"]),
     )
 )
 
@@ -726,7 +730,7 @@ for item in ga4_data:
     # Organic search, direct, referral, organic social, etc. are real
     # traffic but are not ad-driven, so they are excluded from both buckets
     # rather than being dumped into "Meta" by default.
-    if channel == 'Paid Search':
+    if channel in GOOGLE_CHANNELS:
         daily_by_date[date]['google_revenue'] += item['revenue']
         daily_by_date[date]['google_cv'] += item['conversions']
     elif channel == 'Paid Social':
@@ -856,7 +860,7 @@ except Exception as e:
 print("\n🛍️ Fetching product-level purchase data...")
 
 def channel_to_bucket(channel):
-    if channel == 'Paid Search':
+    if channel in GOOGLE_CHANNELS:
         return 'Google広告'
     if channel == 'Paid Social':
         return 'Meta広告'
@@ -1706,7 +1710,7 @@ if google_native:
         })
 else:
     for item in ga4_age_gender_data:
-        if item['channel'] != 'Paid Search':
+        if item['channel'] not in GOOGLE_CHANNELS:
             continue
         ad_age_gender_data.append({
             'date': item['date'], 'platform': 'Google', 'source': 'GA4(参考値)', 'unit': '全体',
@@ -1813,7 +1817,7 @@ for item in meta_ads_geo_data:
 # GA4: engagement rows (bounce/duration/sessions) for both platforms, plus
 # the only source of Google's region x gender cut (no native Google Ads view).
 for item in ga4_region_gender_data:
-    platform = 'Google' if item['channel'] == 'Paid Search' else ('Meta' if item['channel'] == 'Paid Social' else None)
+    platform = 'Google' if item['channel'] in GOOGLE_CHANNELS else ('Meta' if item['channel'] == 'Paid Social' else None)
     if not platform:
         continue
     ad_region_gender_data.append({

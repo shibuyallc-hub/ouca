@@ -1777,7 +1777,7 @@
     }
 
     function trafficChannelBucket(channel) {
-      if (channel === 'Paid Search') return 'Google';
+      if (channel === 'Paid Search' || channel === 'Cross-network') return 'Google';
       if (channel === 'Paid Social') return 'Meta';
       return 'OTHER';
     }

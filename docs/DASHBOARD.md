@@ -63,7 +63,7 @@ OUCA supplement（ouca.today / EC-Force）の広告成果を、Google 広告・M
 |---|---|---|
 | 広告費・クリック | Google 広告 API／Meta API | 日別。Google は、アカウント全体の日別 |
 | 購入数・売上（`Live Data` など） | **GA4 の `purchase` イベントのみ** | GA4 側で「キーイベント」に何を登録していても、購入だけを数えます |
-| 媒体への割り当て | GA4 の流入チャネル | Paid Search → Google、Paid Social → Meta。**自然検索・直接・参照などは、どちらにも入れません** |
+| 媒体への割り当て | GA4 の流入チャネル | Paid Search・Cross-network（P-Max） → Google、Paid Social → Meta。**自然検索・直接・参照などは、どちらにも入れません** |
 | `Google_キャンペーン別` の CV | Google 広告 API（Google が計測した CV） | GA4 の数字とは、一致しないことがあります |
 | `Meta_広告別` の購入数 | Meta API | Meta は、同じ購入を `purchase` と `omni_purchase` の両方で返すため、`omni_purchase` を優先して数えます（足すと2倍になるため） |
 
